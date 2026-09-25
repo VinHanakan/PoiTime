@@ -24,6 +24,9 @@ namespace ReportTimePlayer
     {
         public string id { get; set; }
         public bool randomVoices { get; set; } // 新增随机语音包配置项
+        public int volume { get; set; } = 100;
+        public bool showAnnouncement { get; set; }
+        public string announcementPosition { get; set; } = "BottomRight";
     }
 
     // 单条报时语音配置，包含报时的小时、分钟和对应的文件名
@@ -32,6 +35,7 @@ namespace ReportTimePlayer
         public int hour { get; set; }
         public int minute { get; set; }
         public string fileName { get; set; }
+        public string text { get; set; }
     }
 
     // 新增：特殊语音配置，包含指定日期和对应文件名
@@ -39,6 +43,7 @@ namespace ReportTimePlayer
     {
         public string date { get; set; }
         public string fileName { get; set; }
+        public string text { get; set; }
     }
 
     // 舰娘语音文件夹的配置，增加了 name 属性用于存储舰娘名字，同时增加 special 项
@@ -46,6 +51,7 @@ namespace ReportTimePlayer
     {
         public int voiceCount { get; set; }
         public string name { get; set; }      // 舰娘名字
+        public string portrait { get; set; } = "portrait.png";
         public List<VoiceAnnouncement> voices { get; set; }
         // 新增 special 项，兼容旧版配置（若不存在 special 则为 null）
         public SpecialAnnouncement special { get; set; }
@@ -78,12 +84,14 @@ namespace ReportTimePlayer
                 throw;
             }
         }
-        private System.Timers.Timer timer;
+        private System.Windows.Forms.Timer timer;
         private string voiceFolder;
         private string currentId = "144";
         private NotifyIcon notifyIcon;
         private readonly string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
         private VoiceFolderConfig voiceFolderConfig;
+        private Config globalConfig = new Config();
+        private AnnouncementPopup announcementPopup;
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
         public async Task CheckAndDownloadVoicePackage(string newId)
@@ -199,9 +207,8 @@ namespace ReportTimePlayer
             CheckAndPlaySpecialAnnouncement();
 
             // 定时器每 1000 毫秒检测一次系统时间
-            timer = new System.Timers.Timer(1000);
-            timer.Elapsed += Timer_Elapsed;
-            timer.AutoReset = true;
+            timer = new System.Windows.Forms.Timer { Interval = 1000 };
+            timer.Tick += Timer_Elapsed;
             timer.Start();
         }
 
@@ -229,6 +236,7 @@ namespace ReportTimePlayer
             var menuItems = new ToolStripItem[]
             {
                 CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
+                CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
                 new ToolStripSeparator(),
                 CreateMenuItem("退出", "\uE8BB", (sender, e) => ExitApplication())
@@ -310,6 +318,8 @@ namespace ReportTimePlayer
                     Config config = JsonSerializer.Deserialize<Config>(json);
                     if (config != null)
                     {
+                        globalConfig = config;
+                        globalConfig.volume = Math.Max(0, Math.Min(100, globalConfig.volume));
                         // 新增随机语音包逻辑
                         if (config.randomVoices)
                         {
@@ -328,6 +338,7 @@ namespace ReportTimePlayer
                 else
                 {
                     Config defaultConfig = new Config { id = currentId, randomVoices = false };
+                    globalConfig = defaultConfig;
                     File.WriteAllText(configPath, JsonSerializer.Serialize(defaultConfig));
                 }
             }
@@ -344,7 +355,7 @@ namespace ReportTimePlayer
             LoadVoiceFolderConfig();
 
             // 如果读取到了舰娘名字，则显示舰娘名字；否则显示当前ID
-            bool randomMode = File.ReadAllText(configPath).Contains("\"randomVoices\": true");
+            bool randomMode = globalConfig.randomVoices;
             string suffix = randomMode ? "（随机模式）" : "";
             
             if (voiceFolderConfig != null && !string.IsNullOrEmpty(voiceFolderConfig.name))
@@ -380,6 +391,7 @@ namespace ReportTimePlayer
         /// </summary>
         private void LoadVoiceFolderConfig()
         {
+            voiceFolderConfig = null;
             string voiceConfigPath = Path.Combine(voiceFolder, "config.json");
             if (File.Exists(voiceConfigPath))
             {
@@ -407,10 +419,29 @@ namespace ReportTimePlayer
         {
             LoadGlobalConfig();
             string shipName = voiceFolderConfig?.name ?? currentId;
-            string modeInfo = File.ReadAllText(configPath).Contains("\"randomVoices\": true") 
+            string modeInfo = globalConfig.randomVoices
                 ? "（随机模式）" : "";
             MessageBox.Show($"成功加载{shipName}语音包{modeInfo}", "PoiTime!"); 
             notifyIcon.ShowBalloonTip(2000, "重载配置", $"成功加载{shipName}语音包", ToolTipIcon.Info);
+        }
+
+        private void OpenSettings()
+        {
+            using (var form = new AnnouncementSettingsForm(globalConfig))
+            {
+                if (form.ShowDialog() != DialogResult.OK) return;
+                globalConfig.volume = form.Volume;
+                globalConfig.showAnnouncement = form.ShowAnnouncement;
+                globalConfig.announcementPosition = form.AnnouncementPosition;
+                try
+                {
+                    File.WriteAllText(configPath, JsonSerializer.Serialize(globalConfig, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                catch (Exception ex)
+                {
+                    notifyIcon.ShowBalloonTip(3000, "保存失败", ex.Message, ToolTipIcon.Error);
+                }
+            }
         }
 
         /// <summary>
@@ -488,13 +519,9 @@ namespace ReportTimePlayer
 
                 await CheckAndDownloadVoicePackage(newId);
                 
-                Config newConfig = new Config 
-                { 
-                    id = isRandomMode ? "" : newId,  // 随机模式时清空ID
-                    randomVoices = isRandomMode       // 设置随机模式标志
-                };
-                
-                string json = JsonSerializer.Serialize(newConfig);
+                globalConfig.id = isRandomMode ? "" : newId;
+                globalConfig.randomVoices = isRandomMode;
+                string json = JsonSerializer.Serialize(globalConfig);
                 File.WriteAllText(configPath, json);
                 ReloadAllConfig();
             }
@@ -524,7 +551,7 @@ namespace ReportTimePlayer
         /// <summary>
         /// 定时器事件处理，每秒检测系统时间，根据舰娘语音配置在指定时间播放对应语音
         /// </summary>
-        private void Timer_Elapsed(object sender, ElapsedEventArgs e)
+        private void Timer_Elapsed(object sender, EventArgs e)
         {
             DateTime now = DateTime.Now;
             if (voiceFolderConfig != null && voiceFolderConfig.voices != null)
@@ -536,7 +563,8 @@ namespace ReportTimePlayer
                     {
                         // 用 "HH:mm" 作为键，避免同一分钟内重复播放
                         string key = $"{announcement.hour:D2}:{announcement.minute:D2}";
-                        if (!lastPlayedAnnouncements.ContainsKey(key) || lastPlayedAnnouncements[key].Minute != now.Minute)
+                        if (!lastPlayedAnnouncements.ContainsKey(key) ||
+                            lastPlayedAnnouncements[key].Date != now.Date)
                         {
                             lastPlayedAnnouncements[key] = now;
                             PlayVoiceAnnouncement(announcement);
@@ -552,24 +580,57 @@ namespace ReportTimePlayer
         /// <param name="announcement">报时语音配置项</param>
         private void PlayVoiceAnnouncement(VoiceAnnouncement announcement)
         {
-            string filePath = Path.Combine(voiceFolder, announcement.fileName);
+            PlayAnnouncement(announcement.fileName, announcement.text,
+                $"{announcement.hour:D2}:{announcement.minute:D2}");
+        }
+
+        /// <summary>
+        /// 新增：播放特殊语音，不使用 lastPlayedAnnouncements 逻辑
+        /// </summary>
+        /// <param name="fileName">特殊语音文件名</param>
+        private void PlaySpecialVoiceAnnouncement(string fileName)
+        {
+            PlayAnnouncement(fileName, voiceFolderConfig?.special?.text, "特别报时");
+        }
+
+        private void PlayAnnouncement(string fileName, string line, string fallbackLine)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return;
+            string filePath = Path.Combine(voiceFolder, fileName);
             if (File.Exists(filePath))
             {
+                AudioFileReader reader = null;
+                WaveOutEvent waveOut = null;
                 try
                 {
-                    Mp3FileReader mp3Reader = new Mp3FileReader(filePath);
-                    WaveOutEvent waveOut = new WaveOutEvent();
-                    waveOut.Init(mp3Reader);
-                    waveOut.Play();
-                    // 播放完成后释放资源
+                    reader = new AudioFileReader(filePath) { Volume = globalConfig.volume / 100f };
+                    waveOut = new WaveOutEvent();
+                    waveOut.Init(reader);
+                    var playingReader = reader;
+                    var playingOutput = waveOut;
                     waveOut.PlaybackStopped += (s, eArgs) =>
                     {
-                        waveOut.Dispose();
-                        mp3Reader.Dispose();
+                        playingOutput.Dispose();
+                        playingReader.Dispose();
                     };
+                    waveOut.Play();
+                    if (globalConfig.showAnnouncement)
+                    {
+                        try
+                        {
+                            ShowAnnouncement(string.IsNullOrWhiteSpace(line) ? fallbackLine : line,
+                                reader.TotalTime);
+                        }
+                        catch (Exception ex)
+                        {
+                            notifyIcon.ShowBalloonTip(3000, "弹窗错误", ex.Message, ToolTipIcon.Error);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
+                    waveOut?.Dispose();
+                    reader?.Dispose();
                     notifyIcon.ShowBalloonTip(3000, "播放错误", $"播放 {filePath} 时出错：{ex.Message}", ToolTipIcon.Error);
                 }
             }
@@ -579,36 +640,16 @@ namespace ReportTimePlayer
             }
         }
 
-        /// <summary>
-        /// 新增：播放特殊语音，不使用 lastPlayedAnnouncements 逻辑
-        /// </summary>
-        /// <param name="fileName">特殊语音文件名</param>
-        private void PlaySpecialVoiceAnnouncement(string fileName)
+        private void ShowAnnouncement(string line, TimeSpan duration)
         {
-            string filePath = Path.Combine(voiceFolder, fileName);
-            if (File.Exists(filePath))
-            {
-                try
-                {
-                    Mp3FileReader mp3Reader = new Mp3FileReader(filePath);
-                    WaveOutEvent waveOut = new WaveOutEvent();
-                    waveOut.Init(mp3Reader);
-                    waveOut.Play();
-                    waveOut.PlaybackStopped += (s, eArgs) =>
-                    {
-                        waveOut.Dispose();
-                        mp3Reader.Dispose();
-                    };
-                }
-                catch (Exception ex)
-                {
-                    notifyIcon.ShowBalloonTip(3000, "播放错误", $"播放 {filePath} 时出错：{ex.Message}", ToolTipIcon.Error);
-                }
-            }
-            else
-            {
-                notifyIcon.ShowBalloonTip(3000, "文件未找到", $"未找到文件：{filePath}", ToolTipIcon.Warning);
-            }
+            announcementPopup?.Close();
+            string portraitName = voiceFolderConfig?.portrait;
+            if (string.IsNullOrWhiteSpace(portraitName)) portraitName = "portrait.png";
+            string portraitPath = Path.Combine(voiceFolder, Path.GetFileName(portraitName));
+            announcementPopup = new AnnouncementPopup(
+                voiceFolderConfig?.name ?? currentId, line, portraitPath,
+                globalConfig.announcementPosition, duration);
+            announcementPopup.Show();
         }
 
         /// <summary>
@@ -664,6 +705,7 @@ namespace ReportTimePlayer
         {
             timer.Stop();
             timer.Dispose();
+            announcementPopup?.Close();
             notifyIcon.Visible = false;
             notifyIcon.Dispose();
             Application.Exit();

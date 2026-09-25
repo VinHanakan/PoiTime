@@ -62,6 +62,24 @@ It silently runs in the system tray and plays character voices at scheduled time
 - **Right-click tray icon** → Change ID / Reload / Exit  
 - **First run**: Auto-generates `config.json` and registers auto-start
 
+## 🔊 音量与桌面报时弹窗
+
+右键托盘图标，选择「报时设置」可调节语音音量（0–100%）、开启或关闭立绘与台词弹窗，并选择左上、右上、正中、左下或右下位置。设置保存在程序目录的 `config.json` 中；旧配置会按音量 100%、弹窗关闭运行。
+
+开启弹窗后，在语音包目录 `voices/<id>/` 放入 `portrait.png`。也可以在该目录的 `config.json` 中用 `portrait` 指定另一张图片的文件名（支持 Windows 可读取的图片格式）。给每条 `voices` 记录添加可选的 `text` 字段作为报时台词：
+
+```json
+{
+  "name": "夕立",
+  "portrait": "portrait.png",
+  "voices": [
+    { "hour": 15, "minute": 0, "fileName": "1500.mp3", "text": "提督，十五点了哦！" }
+  ]
+}
+```
+
+特别语音的 `special` 记录同样可添加 `text`。没有立绘时仅显示文字；没有 `text` 时显示报时时间。弹窗会在语音结束附近自动关闭。语音包内容可在程序运行时修改，然后从托盘选择「重载配置」。
+
 ## 🛠️ downloader.py 使用教程
 
 ### ❗请注意，V1.0起，程序更新自动下载语音包逻辑，无需此脚本❗
