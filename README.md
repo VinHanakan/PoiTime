@@ -2,7 +2,7 @@
 
 ![GitHub](https://img.shields.io/badge/Language-C%23-blue) 
 ![GitHub](https://img.shields.io/badge/Platform-Windows-lightgrey) 
-![GitHub](https://img.shields.io/badge/Version-1.2.0-green)
+![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.1-green)
 
 **请使用release版本，仓库代码更新不一定及时**
 
@@ -48,16 +48,15 @@ It silently runs in the system tray and plays character voices at scheduled time
 
 ### 安装步骤 / Installation  
 
-1. 从 [Release页面](https://github.com/YQWhite/PoiTime/releases) 下载最新版本  
-2. 将舰娘语音包放置在 `voices/<id>/` 目录下（示例结构见 [语音包示例](https://github.com/YQWhite/PoiTime/tree/main/voices/144)）  
-3. 双击运行 `PoiTime.exe`  
-4. Download latest release from [Releases](https://github.com/YQWhite/PoiTime/releases)  
-5. Place voice packs in `voices/<id>/` (See [example](https://github.com/YQWhite/PoiTime/tree/main/voices/144))  
-6. Run `PoiTime.exe`
+1. 从 [本 fork 的 Release 页面](https://github.com/VinHanakan/PoiTime/releases) 下载 Windows 压缩包并解压
+2. 双击运行 `PoiTime.exe`，右键托盘图标 →「修改语音包」→「下载新语音包」
+3. 输入 Wiki 语音 ID 和舰娘百科页面名，例如 `144`、`夕立改二`；程序会下载语音、台词和立绘
+4. Download and extract the Windows archive from [this fork's releases](https://github.com/VinHanakan/PoiTime/releases)
+5. Run `PoiTime.exe`, then use the tray menu to download a voice pack (for example ID `144`, page `夕立改二`)
 
 ### 基本操作 / Usage  
 
-- **右键托盘图标** → 修改ID / 重载配置 / 退出  
+- **右键托盘图标** → 修改语音包 / 报时设置 / Wiki 补全 / 重载配置 / 退出
 - **首次运行**：自动生成 `config.json` 并注册开机启动  
 - **Right-click tray icon** → Change ID / Reload / Exit  
 - **First run**: Auto-generates `config.json` and registers auto-start
