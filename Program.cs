@@ -92,6 +92,7 @@ namespace ReportTimePlayer
         private VoiceFolderConfig voiceFolderConfig;
         private Config globalConfig = new Config();
         private AnnouncementPopup announcementPopup;
+        private bool isEnrichingVoicePack;
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
         public async Task CheckAndDownloadVoicePackage(string newId)
@@ -126,7 +127,8 @@ namespace ReportTimePlayer
                     MessageBox.Show($"语音包配置文件缺失,正在下载完整语音包", "PoiTime!", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     await DownloadVoiceFiles(newId, targetFolder);
                     CreateConfigFile(newId, targetFolder, shipName);
-                    MessageBox.Show($"下载完成", "PoiTime!", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    string wikiStatus = await TryEnrichVoicePackAsync(newId, shipName, targetFolder);
+                    MessageBox.Show("下载完成。" + wikiStatus, "PoiTime!", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 catch (Exception ex)
                 {
@@ -197,6 +199,23 @@ namespace ReportTimePlayer
             string configJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(Path.Combine(targetFolder, "config.json"), configJson);
         }
+
+        public async Task<string> TryEnrichVoicePackAsync(string shipId, string wikiName, string targetFolder)
+        {
+            try
+            {
+                using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) })
+                {
+                    var result = await WikiVoicePackService.EnrichAsync(shipId, wikiName,
+                        targetFolder, client);
+                    return result.Summary;
+                }
+            }
+            catch (Exception ex)
+            {
+                return "Wiki 立绘与台词补全失败：" + ex.Message;
+            }
+        }
         public ReportTimeContext()
         {
             InitializeTrayIcon();
@@ -237,6 +256,7 @@ namespace ReportTimePlayer
             {
                 CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
                 CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
+                CreateMenuItem("从 Wiki 补全立绘和台词", "\uE753", async (sender, e) => await EnrichCurrentVoicePackAsync()),
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
                 new ToolStripSeparator(),
                 CreateMenuItem("退出", "\uE8BB", (sender, e) => ExitApplication())
@@ -444,18 +464,38 @@ namespace ReportTimePlayer
             }
         }
 
+        private async Task EnrichCurrentVoicePackAsync()
+        {
+            if (isEnrichingVoicePack) return;
+            if (voiceFolderConfig == null)
+            {
+                MessageBox.Show("当前语音包没有配置文件。", "PoiTime!");
+                return;
+            }
+            string wikiName = Interaction.InputBox("请输入舰娘百科页面名称：",
+                "从 Wiki 补全立绘和台词", voiceFolderConfig.name ?? "");
+            if (string.IsNullOrWhiteSpace(wikiName)) return;
+
+            isEnrichingVoicePack = true;
+            try
+            {
+                notifyIcon.ShowBalloonTip(2000, "Wiki 补全", "正在获取立绘和台词…", ToolTipIcon.Info);
+                string status = await TryEnrichVoicePackAsync(currentId, wikiName, voiceFolder);
+                LoadVoiceFolderConfig();
+                MessageBox.Show(status, "PoiTime!");
+            }
+            finally
+            {
+                isEnrichingVoicePack = false;
+            }
+        }
+
         /// <summary>
         /// 修改舰娘ID，并更新全局配置，然后重载配置
         /// </summary>
         private async void ChangeId()
         {
             var voicePacks = GetAvailableVoicePacks();
-            if (voicePacks.Count == 0)
-            {
-                MessageBox.Show("未找到本地语音包，请手动输入ID下载", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
             using (var selector = new VoicePackSelector(voicePacks, this))
             {
                 if (selector.ShowDialog() == DialogResult.OK)
@@ -929,8 +969,11 @@ namespace ReportTimePlayer
                 }
 
                 _context.CreateConfigFile(_shipId, targetFolder, _shipName);
-                // 移除以下错误行
-                // if (chkRandomMode.Checked) selectedId = "RANDOM";
+                lblStatus.Text = "正在从 Wiki 获取立绘和台词...";
+                string wikiStatus = await _context.TryEnrichVoicePackAsync(
+                    _shipId, _shipName, targetFolder);
+                MessageBox.Show("语音包下载完成。" + wikiStatus, "PoiTime!",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 this.DialogResult = DialogResult.OK;
             }
             catch (Exception ex)

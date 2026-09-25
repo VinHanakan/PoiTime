@@ -66,7 +66,9 @@ It silently runs in the system tray and plays character voices at scheduled time
 
 右键托盘图标，选择「报时设置」可调节语音音量（0–100%）、开启或关闭立绘与台词弹窗，并选择左上、右上、正中、左下或右下位置。设置保存在程序目录的 `config.json` 中；旧配置会按音量 100%、弹窗关闭运行。
 
-开启弹窗后，在语音包目录 `voices/<id>/` 放入 `portrait.png`。也可以在该目录的 `config.json` 中用 `portrait` 指定另一张图片的文件名（支持 Windows 可读取的图片格式）。给每条 `voices` 记录添加可选的 `text` 字段作为报时台词：
+下载新语音包时，程序会用填写的舰娘名称查找舰娘百科页面，按语音文件 ID 尝试补全时报的中文译文，并下载该改造型号的普通立绘到 `voices/<id>/portrait.png`。若 Wiki 无法访问或缺少对应资料，语音包仍会保留，并提示未补全的内容。已有语音包可右键托盘图标，选择「从 Wiki 补全立绘和台词」，输入正确的页面名称再次获取；本地已有的立绘和已填写的台词不会被覆盖。
+
+也可以手动在语音包目录 `voices/<id>/` 放入 `portrait.png`，或在该目录的 `config.json` 中用 `portrait` 指定另一张图片的文件名（支持 Windows 可读取的图片格式）。每条 `voices` 记录的 `text` 字段是报时台词：
 
 ```json
 {

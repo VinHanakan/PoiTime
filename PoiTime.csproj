@@ -163,6 +163,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="AnnouncementSettingsForm.cs" />
     <Compile Include="AnnouncementPopup.cs" />
+    <Compile Include="WikiVoicePackService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
