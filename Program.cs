@@ -27,6 +27,10 @@ namespace ReportTimePlayer
         public int volume { get; set; } = 100;
         public bool showAnnouncement { get; set; }
         public string announcementPosition { get; set; } = "BottomRight";
+        public string backgroundMode { get; set; } = "Color";
+        public string backgroundImage { get; set; } = "";
+        public string backgroundColor { get; set; } = "#1C202B";
+        public int backgroundOpacity { get; set; } = 100;
     }
 
     // 单条报时语音配置，包含报时的小时、分钟和对应的文件名
@@ -92,6 +96,7 @@ namespace ReportTimePlayer
         private VoiceFolderConfig voiceFolderConfig;
         private Config globalConfig = new Config();
         private AnnouncementPopup announcementPopup;
+        private WaveOutEvent previewOutput;
         private bool isEnrichingVoicePack;
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
@@ -255,6 +260,8 @@ namespace ReportTimePlayer
             var menuItems = new ToolStripItem[]
             {
                 CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
+                CreateMenuItem("试听当前时刻报时", "\uE768", (sender, e) => PreviewAnnouncement(DateTime.Now.Hour, globalConfig)),
+                CreateMenuItem("停止试听", "\uE71A", (sender, e) => StopPreview()),
                 CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
                 CreateMenuItem("从 Wiki 补全立绘和台词", "\uE753", async (sender, e) => await EnrichCurrentVoicePackAsync()),
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
@@ -447,12 +454,10 @@ namespace ReportTimePlayer
 
         private void OpenSettings()
         {
-            using (var form = new AnnouncementSettingsForm(globalConfig))
+            using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncement, StopPreview))
             {
                 if (form.ShowDialog() != DialogResult.OK) return;
-                globalConfig.volume = form.Volume;
-                globalConfig.showAnnouncement = form.ShowAnnouncement;
-                globalConfig.announcementPosition = form.AnnouncementPosition;
+                globalConfig = form.Draft;
                 try
                 {
                     File.WriteAllText(configPath, JsonSerializer.Serialize(globalConfig, new JsonSerializerOptions { WriteIndented = true }));
@@ -633,8 +638,31 @@ namespace ReportTimePlayer
             PlayAnnouncement(fileName, voiceFolderConfig?.special?.text, "特别报时");
         }
 
-        private void PlayAnnouncement(string fileName, string line, string fallbackLine)
+        private void StopPreview()
         {
+            var output = previewOutput;
+            previewOutput = null;
+            output?.Stop();
+            announcementPopup?.Close();
+            announcementPopup = null;
+        }
+
+        private void PreviewAnnouncement(int hour, Config settings)
+        {
+            var announcement = voiceFolderConfig?.voices?.FirstOrDefault(a => a.hour == hour);
+            if (announcement == null)
+            {
+                MessageBox.Show("当前语音包没有此时刻的语音，请先下载或选择语音包。", "试听报时");
+                return;
+            }
+            StopPreview();
+            PlayAnnouncement(announcement.fileName, announcement.text,
+                $"{announcement.hour:D2}:{announcement.minute:D2}", settings, true);
+        }
+
+        private void PlayAnnouncement(string fileName, string line, string fallbackLine, Config settings = null, bool preview = false)
+        {
+            settings = settings ?? globalConfig;
             if (string.IsNullOrWhiteSpace(fileName)) return;
             string filePath = Path.Combine(voiceFolder, fileName);
             if (File.Exists(filePath))
@@ -643,23 +671,26 @@ namespace ReportTimePlayer
                 WaveOutEvent waveOut = null;
                 try
                 {
-                    reader = new AudioFileReader(filePath) { Volume = globalConfig.volume / 100f };
+                    reader = new AudioFileReader(filePath) { Volume = Math.Max(0, Math.Min(100, settings.volume)) / 100f };
                     waveOut = new WaveOutEvent();
                     waveOut.Init(reader);
                     var playingReader = reader;
                     var playingOutput = waveOut;
                     waveOut.PlaybackStopped += (s, eArgs) =>
                     {
+                        if (ReferenceEquals(previewOutput, playingOutput)) previewOutput = null;
                         playingOutput.Dispose();
                         playingReader.Dispose();
                     };
+                    if (preview) previewOutput = waveOut;
+                    var duration = reader.TotalTime;
                     waveOut.Play();
-                    if (globalConfig.showAnnouncement)
+                    if (settings.showAnnouncement)
                     {
                         try
                         {
                             ShowAnnouncement(string.IsNullOrWhiteSpace(line) ? fallbackLine : line,
-                                reader.TotalTime);
+                                duration, settings);
                         }
                         catch (Exception ex)
                         {
@@ -669,6 +700,7 @@ namespace ReportTimePlayer
                 }
                 catch (Exception ex)
                 {
+                    if (ReferenceEquals(previewOutput, waveOut)) previewOutput = null;
                     waveOut?.Dispose();
                     reader?.Dispose();
                     notifyIcon.ShowBalloonTip(3000, "播放错误", $"播放 {filePath} 时出错：{ex.Message}", ToolTipIcon.Error);
@@ -680,7 +712,7 @@ namespace ReportTimePlayer
             }
         }
 
-        private void ShowAnnouncement(string line, TimeSpan duration)
+        private void ShowAnnouncement(string line, TimeSpan duration, Config settings)
         {
             announcementPopup?.Close();
             string portraitName = voiceFolderConfig?.portrait;
@@ -688,7 +720,7 @@ namespace ReportTimePlayer
             string portraitPath = Path.Combine(voiceFolder, Path.GetFileName(portraitName));
             announcementPopup = new AnnouncementPopup(
                 voiceFolderConfig?.name ?? currentId, line, portraitPath,
-                globalConfig.announcementPosition, duration);
+                settings, duration);
             announcementPopup.Show();
         }
 
@@ -743,6 +775,7 @@ namespace ReportTimePlayer
         /// </summary>
         private void ExitApplication()
         {
+            StopPreview();
             timer.Stop();
             timer.Dispose();
             announcementPopup?.Close();

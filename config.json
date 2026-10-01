@@ -1,7 +1,11 @@
 {
-    "id": "144",
-    "randomVoices": false,
-    "volume": 100,
-    "showAnnouncement": false,
-    "announcementPosition": "BottomRight"
+  "id": "144",
+  "randomVoices": false,
+  "volume": 100,
+  "showAnnouncement": false,
+  "announcementPosition": "BottomRight",
+  "backgroundMode": "Color",
+  "backgroundImage": "",
+  "backgroundColor": "#1C202B",
+  "backgroundOpacity": 100
 }

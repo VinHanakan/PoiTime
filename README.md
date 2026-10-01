@@ -1,8 +1,8 @@
-# # PoiTime! - 舰娘Collection整点报时工具 / Kantai Collection Hourly Voice Announcement Tool
+﻿# # PoiTime! - 舰娘Collection整点报时工具 / Kantai Collection Hourly Voice Announcement Tool
 
 ![GitHub](https://img.shields.io/badge/Language-C%23-blue) 
 ![GitHub](https://img.shields.io/badge/Platform-Windows-lightgrey) 
-![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.1-green)
+![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.2-green)
 
 **请使用release版本，仓库代码更新不一定及时**
 
@@ -64,6 +64,15 @@ It silently runs in the system tray and plays character voices at scheduled time
 ## 🔊 音量与桌面报时弹窗
 
 右键托盘图标，选择「报时设置」可调节语音音量（0–100%）、开启或关闭立绘与台词弹窗，并选择左上、右上、正中、左下或右下位置。设置保存在程序目录的 `config.json` 中；旧配置会按音量 100%、弹窗关闭运行。
+
+### 试听和背景
+
+- 托盘菜单「试听当前时刻报时」立即播放当前小时的语音；「停止试听」结束试听。
+- 「报时设置」中可选择 0–23 点并点击「试听」，使用尚未保存的音量、弹窗位置和背景设置预览；试听不会影响当天整点报时记录。连续试听会停止上一段。
+- 开启「报时显示立绘与台词」后，背景可选纯色或自定义图片（PNG、JPG、BMP、GIF），图片居中裁剪填满弹窗。
+- 「背景不透明度」0% 为全透明，100% 为不透明，仅影响背景，立绘和文字保持清晰。点击「保存」后生效；「取消」保留原配置。
+- 背景图片使用所选文件的路径，请保留该图片；若文件被移走，弹窗会回退到纯色背景。
+- OBS 测试时可以保持「报时设置」窗口打开，在应用程序音频采集中选择 PoiTime.exe，然后点击「试听」观察音量条。
 
 下载新语音包时，程序会用填写的舰娘名称查找舰娘百科页面，按语音文件 ID 尝试补全时报的中文译文，并下载该改造型号的普通立绘到 `voices/<id>/portrait.png`。若 Wiki 无法访问或缺少对应资料，语音包仍会保留，并提示未补全的内容。已有语音包可右键托盘图标，选择「从 Wiki 补全立绘和台词」，输入正确的页面名称再次获取；本地已有的立绘和已填写的台词不会被覆盖。
 
