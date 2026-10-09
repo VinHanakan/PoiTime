@@ -96,7 +96,8 @@ namespace ReportTimePlayer
         private VoiceFolderConfig voiceFolderConfig;
         private Config globalConfig = new Config();
         private AnnouncementPopup announcementPopup;
-        private WaveOutEvent previewOutput;
+        private AnnouncementAudio audio;
+        private ObsCaptureForm obsCaptureForm;
         private bool isEnrichingVoicePack;
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
@@ -225,6 +226,10 @@ namespace ReportTimePlayer
         {
             InitializeTrayIcon();
             LoadGlobalConfig();
+            obsCaptureForm = new ObsCaptureForm(() => PreviewAnnouncement(DateTime.Now.Hour, globalConfig), StopPreview, OpenSettings);
+            obsCaptureForm.Show();
+            try { audio = new AnnouncementAudio(); audio.Start(); }
+            catch (Exception ex) { notifyIcon.ShowBalloonTip(3000, "音频初始化失败", ex.Message, ToolTipIcon.Warning); }
             SetAutoRun();
 
             // 新增：检测并播放特殊语音（仅在指定日期首次运行时播放）
@@ -262,6 +267,7 @@ namespace ReportTimePlayer
                 CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
                 CreateMenuItem("试听当前时刻报时", "\uE768", (sender, e) => PreviewAnnouncement(DateTime.Now.Hour, globalConfig)),
                 CreateMenuItem("停止试听", "\uE71A", (sender, e) => StopPreview()),
+                CreateMenuItem("OBS 音频采集窗口", "\uE7F4", (sender, e) => obsCaptureForm?.Restore()),
                 CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
                 CreateMenuItem("从 Wiki 补全立绘和台词", "\uE753", async (sender, e) => await EnrichCurrentVoicePackAsync()),
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
@@ -640,9 +646,7 @@ namespace ReportTimePlayer
 
         private void StopPreview()
         {
-            var output = previewOutput;
-            previewOutput = null;
-            output?.Stop();
+            audio?.StopPreview();
             announcementPopup?.Close();
             announcementPopup = null;
         }
@@ -667,42 +671,18 @@ namespace ReportTimePlayer
             string filePath = Path.Combine(voiceFolder, fileName);
             if (File.Exists(filePath))
             {
-                AudioFileReader reader = null;
-                WaveOutEvent waveOut = null;
                 try
                 {
-                    reader = new AudioFileReader(filePath) { Volume = Math.Max(0, Math.Min(100, settings.volume)) / 100f };
-                    waveOut = new WaveOutEvent();
-                    waveOut.Init(reader);
-                    var playingReader = reader;
-                    var playingOutput = waveOut;
-                    waveOut.PlaybackStopped += (s, eArgs) =>
-                    {
-                        if (ReferenceEquals(previewOutput, playingOutput)) previewOutput = null;
-                        playingOutput.Dispose();
-                        playingReader.Dispose();
-                    };
-                    if (preview) previewOutput = waveOut;
-                    var duration = reader.TotalTime;
-                    waveOut.Play();
+                    if (audio == null) audio = new AnnouncementAudio();
+                    var duration = audio.Play(filePath, settings.volume, preview);
                     if (settings.showAnnouncement)
                     {
-                        try
-                        {
-                            ShowAnnouncement(string.IsNullOrWhiteSpace(line) ? fallbackLine : line,
-                                duration, settings);
-                        }
-                        catch (Exception ex)
-                        {
-                            notifyIcon.ShowBalloonTip(3000, "弹窗错误", ex.Message, ToolTipIcon.Error);
-                        }
+                        try { ShowAnnouncement(string.IsNullOrWhiteSpace(line) ? fallbackLine : line, duration, settings); }
+                        catch (Exception ex) { notifyIcon.ShowBalloonTip(3000, "弹窗错误", ex.Message, ToolTipIcon.Error); }
                     }
                 }
                 catch (Exception ex)
                 {
-                    if (ReferenceEquals(previewOutput, waveOut)) previewOutput = null;
-                    waveOut?.Dispose();
-                    reader?.Dispose();
                     notifyIcon.ShowBalloonTip(3000, "播放错误", $"播放 {filePath} 时出错：{ex.Message}", ToolTipIcon.Error);
                 }
             }
@@ -776,6 +756,8 @@ namespace ReportTimePlayer
         private void ExitApplication()
         {
             StopPreview();
+            audio?.Dispose();
+            obsCaptureForm?.Dispose();
             timer.Stop();
             timer.Dispose();
             announcementPopup?.Close();
@@ -792,6 +774,9 @@ namespace ReportTimePlayer
             if (disposing)
             {
                 timer?.Dispose();
+                audio?.Dispose();
+                obsCaptureForm?.Dispose();
+                announcementPopup?.Dispose();
                 notifyIcon?.Dispose();
             }
             base.Dispose(disposing);

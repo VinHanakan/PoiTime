@@ -2,7 +2,7 @@
 
 ![GitHub](https://img.shields.io/badge/Language-C%23-blue) 
 ![GitHub](https://img.shields.io/badge/Platform-Windows-lightgrey) 
-![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.2-green)
+![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.3-green)
 
 **请使用release版本，仓库代码更新不一定及时**
 
@@ -72,7 +72,7 @@ It silently runs in the system tray and plays character voices at scheduled time
 - 开启「报时显示立绘与台词」后，背景可选纯色或自定义图片（PNG、JPG、BMP、GIF），图片居中裁剪填满弹窗。
 - 「背景不透明度」0% 为全透明，100% 为不透明，仅影响背景，立绘和文字保持清晰。点击「保存」后生效；「取消」保留原配置。
 - 背景图片使用所选文件的路径，请保留该图片；若文件被移走，弹窗会回退到纯色背景。
-- OBS 测试时可以保持「报时设置」窗口打开，在应用程序音频采集中选择 PoiTime.exe，然后点击「试听」观察音量条。
+- OBS 测试时在应用程序音频采集中选择 `[PoiTime.exe] PoiTime — OBS 音频`，匹配优先级选按可执行程序匹配，然后试听观察音量条。
 
 下载新语音包时，程序会用填写的舰娘名称查找舰娘百科页面，按语音文件 ID 尝试补全时报的中文译文，并下载该改造型号的普通立绘到 `voices/<id>/portrait.png`。若 Wiki 无法访问或缺少对应资料，语音包仍会保留，并提示未补全的内容。已有语音包可右键托盘图标，选择「从 Wiki 补全立绘和台词」，输入正确的页面名称再次获取；本地已有的立绘和已填写的台词不会被覆盖。
 
@@ -89,6 +89,18 @@ It silently runs in the system tray and plays character voices at scheduled time
 ```
 
 特别语音的 `special` 记录同样可添加 `text`。没有立绘时仅显示文字；没有 `text` 时显示报时时间。弹窗会在语音结束附近自动关闭。语音包内容可在程序运行时修改，然后从托盘选择「重载配置」。
+
+## OBS 音频采集
+
+应用启动后保留一个最小化的「PoiTime — OBS 音频」窗口。托盘菜单「OBS 音频采集窗口」可展开它，点击关闭也仅最小化；真正退出请使用托盘「退出」。关闭报时设置和立绘弹窗不会关闭采集窗口。
+
+1. OBS 添加或打开「应用程序音频采集」源。
+2. 将窗口重新选择为 `[PoiTime.exe] PoiTime — OBS 音频`，匹配优先级选择按可执行程序匹配。
+3. 点击「试听当前时刻」观察音量条，再最小化窗口继续使用。无需一直打开报时设置。
+
+音频输出统一为 48 kHz 立体声，复用同一输出会话；报时间隔输出精确静音，避免短语音频繁初始化音频设备。停止试听只停止试听语音，不关闭输出会话或影响正常报时。
+
+若同一声音被桌面音频和应用音频同时采集，请停用其中一个源或分配不同音轨，避免叠加回声。窗口最小化保持可匹配；应用退出后该源没有信号属于正常行为。
 
 ## 🛠️ downloader.py 使用教程
 
