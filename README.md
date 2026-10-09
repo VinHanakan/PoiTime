@@ -2,7 +2,7 @@
 
 ![GitHub](https://img.shields.io/badge/Language-C%23-blue) 
 ![GitHub](https://img.shields.io/badge/Platform-Windows-lightgrey) 
-![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.4-green)
+![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.5-green)
 
 **请使用release版本，仓库代码更新不一定及时**
 
@@ -95,10 +95,10 @@ It silently runs in the system tray and plays character voices at scheduled time
 1. 启动 PoiTime，右键托盘 →「复制 OBS 浏览器源地址」。默认地址为 `http://127.0.0.1:18742/`。
 2. 在 OBS 添加「浏览器」源，粘贴地址并勾选「通过 OBS 控制音频」。页面完全透明，仅输出声音；尺寸可设为 32×32。
 3. 取消「不可见时关闭源」和「场景变为活动状态时刷新浏览器」，让页面持续连接。
-4. PoiTime「报时设置」中的声音输出选择「OBS 浏览器源」，点击「试听」，检查这个浏览器源的音量条。
+4. PoiTime「报时设置」中的声音输出选择「本机播放 + OBS 浏览器源（推荐）」，点击「试听」，检查这个浏览器源的音量条。
 5. 保存并关闭设置。PoiTime 只在托盘运行，整点报时继续发送到 OBS。
 
-声音输出支持「OBS 浏览器源」「本机播放」「本机和 OBS 浏览器源」。默认采用浏览器源；此模式不从本机声卡播放，也不创建固定采集窗口。希望自己也听到声音，可在 OBS 高级音频设置中为浏览器源开启「监听并输出」；开启本机和浏览器两边播放时，请避免再叠加监听或桌面音频。
+声音输出可以直接在 PoiTime「报时设置」中选择：默认「本机播放 + OBS 浏览器源（推荐）」会保留原来的本机发声，并同时把音频发送到 OBS；也可选择「仅本机播放」或「仅 OBS 浏览器源」。修改后点击保存，音量同时作用于两边，无需固定采集窗口。默认双输出模式下无需在 OBS 开启监听；OBS 保持监听关闭即可，避免与本机发声叠加。
 
 浏览器源音频使用 PoiTime 当前音量，OBS 仍可独立调整音量。停止试听会通知浏览器停止该段试听，正常整点报时不受影响。页面刷新不会补播旧声音；服务重连后继续接收新的报时。请只添加一份此浏览器源，避免重复播放。
 

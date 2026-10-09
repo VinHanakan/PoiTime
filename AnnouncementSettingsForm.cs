@@ -21,7 +21,7 @@ namespace ReportTimePlayer
             backgroundMode = backgroundBox.SelectedIndex == 1 ? "Image" : "Color",
             backgroundImage = imagePathBox.Text, backgroundColor = ColorTranslator.ToHtml(backgroundColor),
             backgroundOpacity = opacitySlider.Value,
-            audioOutput = new[] { "Browser", "Local", "Both" }[outputBox.SelectedIndex], browserPort = original.browserPort
+            audioOutput = new[] { "Both", "Local", "Browser" }[outputBox.SelectedIndex], browserPort = original.browserPort
         };
 
         public AnnouncementSettingsForm(Config config, Action<int, Config> preview, Action stop)
@@ -29,7 +29,7 @@ namespace ReportTimePlayer
             original = config;
             Text = "报时设置";
             Font = new Font("微软雅黑", 9);
-            ClientSize = new Size(440, 520);
+            ClientSize = new Size(440, 540);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
@@ -78,13 +78,14 @@ namespace ReportTimePlayer
             LabelAt("试听使用当前设置；点击保存后用于整点报时。", 16, 371);
             LabelAt("声音输出", 16, 405);
             outputBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(105, 400), Size = new Size(310, 26) };
-            outputBox.Items.AddRange(new object[] { "OBS 浏览器源", "本机播放", "本机和 OBS 浏览器源" });
-            int outputIndex = Array.IndexOf(new[] { "Browser", "Local", "Both" }, config.audioOutput);
+            outputBox.Items.AddRange(new object[] { "本机播放 + OBS 浏览器源（推荐）", "仅本机播放", "仅 OBS 浏览器源" });
+            int outputIndex = Array.IndexOf(new[] { "Both", "Local", "Browser" }, config.audioOutput);
             outputBox.SelectedIndex = outputIndex < 0 ? 0 : outputIndex;
             LabelAt("浏览器地址", 16, 443);
             var browserUrl = new TextBox { ReadOnly = true, Text = "http://127.0.0.1:" + config.browserPort + "/", Location = new Point(105, 438), Size = new Size(310, 26) };
             Controls.AddRange(new Control[] { outputBox, browserUrl });
-            var save = new Button { Text = "保存", Location = new Point(245, 482), Size = new Size(75, 28) };
+            LabelAt("修改声音输出后点击保存；音量同时作用于两边。", 16, 473);
+            var save = new Button { Text = "保存", Location = new Point(245, 502), Size = new Size(75, 28) };
             save.Click += (s, e) => {
                 if (Draft.showAnnouncement && Draft.backgroundMode == "Image") {
                     try { using (var image = Image.FromFile(Draft.backgroundImage)) { } }
@@ -92,7 +93,7 @@ namespace ReportTimePlayer
                 }
                 DialogResult = DialogResult.OK;
             };
-            var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Location = new Point(340, 482), Size = new Size(75, 28) };
+            var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Location = new Point(340, 502), Size = new Size(75, 28) };
             Controls.AddRange(new Control[] { volumeSlider, showAnnouncementBox, positionBox, backgroundBox, colorButton, imagePathBox, browse, opacitySlider, hour, play, stopButton, save, cancel });
             AcceptButton = save; CancelButton = cancel;
             FormClosed += (s, e) => stop();

@@ -2,8 +2,19 @@
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
 $dir=(Resolve-Path $BuildDirectory).Path
-$resolver=[ResolveEventHandler]{param($sender,$args) $path=Join-Path $dir ((New-Object Reflection.AssemblyName($args.Name)).Name+'.dll'); if([IO.File]::Exists($path)){return [Reflection.Assembly]::LoadFrom($path)}; return $null}
-[AppDomain]::CurrentDomain.add_AssemblyResolve($resolver)
+Add-Type -AssemblyName System.Net.Http
+Add-Type -TypeDefinition @"
+using System; using System.IO; using System.Reflection;
+public static class AudioTestResolver {
+    public static void Register(string directory) {
+        AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => {
+            string path = Path.Combine(directory, new AssemblyName(args.Name).Name + ".dll");
+            return File.Exists(path) ? Assembly.LoadFrom(path) : null;
+        };
+    }
+}
+"@
+[AudioTestResolver]::Register($dir)
 $a=[Reflection.Assembly]::LoadFrom((Join-Path $dir 'PoiTime.exe'))
 $c=New-Object ReportTimePlayer.Config
 $c.audioOutput="Local"
@@ -59,6 +70,25 @@ if($session.PlaybackState -ne 'Playing'){throw 'EOF stopped persistent session'}
 $samples=New-Object float[] 1000
 if($audio.Read($samples,0,1000) -ne 1000){throw 'idle buffer not filled'}
 if(($samples | Where-Object {$_ -ne 0}).Count -ne 0){throw 'idle audio not silent'}
+$default=New-Object ReportTimePlayer.Config
+if($default.audioOutput -ne 'Both'){throw 'default output is not both'}
+$probe=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0); $probe.Start(); $port=$probe.LocalEndpoint.Port; $probe.Stop()
+$browser=New-Object ReportTimePlayer.BrowserAudioServer($port)
+$http=New-Object Net.Http.HttpClient
+try {
+    $t.GetField('browserAudio',$flags).SetValue($ctx,$browser)
+    $baseline=$http.GetStringAsync($browser.Url+'status').Result | ConvertFrom-Json
+    $c.audioOutput='Both'; $c.volume=34
+    $t.GetMethod('PreviewAnnouncement',$flags).Invoke($ctx,@([int]12,$c.PSObject.BaseObject)) | Out-Null
+    $events=$http.GetStringAsync($browser.Url+'events?after='+$baseline.sequence).Result | ConvertFrom-Json
+    $play=$events | Where-Object {$_.kind -eq 'play'} | Select-Object -First 1
+    if(!$play -or [Math]::Abs($play.volume-.34) -gt .00001){throw 'both mode did not send browser audio at chosen volume'}
+    $clips=$audio.GetType().GetField('clips',$flags).GetValue($audio)
+    if($clips.Count -ne 1 -or $session.PlaybackState -ne 'Playing'){throw 'both mode did not retain local playback'}
+    $t.GetMethod('StopPreview',$flags).Invoke($ctx,@()) | Out-Null
+    $stop=$http.GetStringAsync($browser.Url+'events?after='+$play.sequence).Result | ConvertFrom-Json
+    if($clips.Count -ne 0 -or $stop.kind -ne 'stopPreview'){throw 'both mode did not stop both outputs'}
+} finally {$http.Dispose(); $browser.Dispose()}
 $audio.Dispose(); $audio.Dispose()
 $icon.Dispose()
-'PASS: alpha rendering, settings draft, 15 repeated local previews, persistent audio session after stop/EOF, exact silent idle'
+'PASS: alpha rendering, settings draft, 15 repeated local previews, persistent session, default Both, simultaneous local/browser playback and stop, shared volume'

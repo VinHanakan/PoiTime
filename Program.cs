@@ -31,7 +31,7 @@ namespace ReportTimePlayer
         public string backgroundImage { get; set; } = "";
         public string backgroundColor { get; set; } = "#1C202B";
         public int backgroundOpacity { get; set; } = 100;
-        public string audioOutput { get; set; } = "Browser";
+        public string audioOutput { get; set; } = "Both";
         public int browserPort { get; set; } = 18742;
     }
 

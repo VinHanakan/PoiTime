@@ -8,6 +8,6 @@
   "backgroundImage": "",
   "backgroundColor": "#1C202B",
   "backgroundOpacity": 100,
-  "audioOutput": "Browser",
+  "audioOutput": "Both",
   "browserPort": 18742
 }
