@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>PoiTime OBS 音频源</title>
+<style>html,body{margin:0;background:transparent;overflow:hidden}</style></head><body>
+<script>
+'use strict';
+let cursor=0, generation=0, stopped=false;
+const playing=new Set();
+function stopPreview(){generation++; for(const item of playing){if(item.preview){item.audio.pause(); item.audio.src=''; if(item.objectUrl)URL.revokeObjectURL(item.objectUrl); playing.delete(item);}}}
+async function play(event){
+  const ticket=generation;
+  const item={audio:new Audio(),preview:event.preview,objectUrl:null};
+  playing.add(item);
+  try{
+    const response=await fetch(event.url,{cache:'no-store'});
+    if(!response.ok)throw new Error('Audio HTTP '+response.status);
+    const blob=await response.blob();
+    if(stopped || !playing.has(item) || (event.preview && ticket!==generation))return;
+    item.objectUrl=URL.createObjectURL(blob);
+    item.audio.src=item.objectUrl; item.audio.volume=event.volume;
+    const cleanup=()=>{playing.delete(item); if(item.objectUrl){URL.revokeObjectURL(item.objectUrl); item.objectUrl=null;}};
+    item.audio.addEventListener('ended',cleanup,{once:true});
+    item.audio.addEventListener('error',cleanup,{once:true});
+    await item.audio.play();
+  }catch(error){playing.delete(item); if(item.objectUrl)URL.revokeObjectURL(item.objectUrl); console.error('PoiTime playback:',error);}
+}
+async function connect(){
+  while(!stopped){
+    try{
+      const response=await fetch('status',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+      if(!response.ok)throw new Error('Disconnected');
+      cursor=(await response.json()).sequence;
+      while(!stopped){
+        const result=await fetch('events?after='+cursor,{cache:'no-store',signal:AbortSignal.timeout(5000)});
+        if(!result.ok)throw new Error('Disconnected');
+        for(const event of await result.json()){
+          if(event.sequence<=cursor)continue;
+          cursor=event.sequence;
+          if(event.kind==='stopPreview')stopPreview();
+          else if(event.kind==='play')void play(event);
+        }
+        await new Promise(resolve=>setTimeout(resolve,150));
+      }
+    }catch(error){ console.warn('PoiTime reconnecting:',error); await new Promise(resolve=>setTimeout(resolve,1000)); }
+  }
+}
+window.addEventListener('pagehide',()=>{stopped=true;for(const item of playing){item.audio.pause();if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);}playing.clear();});
+void connect();
+</script></body></html>

@@ -7,5 +7,7 @@
   "backgroundMode": "Color",
   "backgroundImage": "",
   "backgroundColor": "#1C202B",
-  "backgroundOpacity": 100
+  "backgroundOpacity": 100,
+  "audioOutput": "Browser",
+  "browserPort": 18742
 }

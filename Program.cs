@@ -31,6 +31,8 @@ namespace ReportTimePlayer
         public string backgroundImage { get; set; } = "";
         public string backgroundColor { get; set; } = "#1C202B";
         public int backgroundOpacity { get; set; } = 100;
+        public string audioOutput { get; set; } = "Browser";
+        public int browserPort { get; set; } = 18742;
     }
 
     // 单条报时语音配置，包含报时的小时、分钟和对应的文件名
@@ -97,7 +99,7 @@ namespace ReportTimePlayer
         private Config globalConfig = new Config();
         private AnnouncementPopup announcementPopup;
         private AnnouncementAudio audio;
-        private ObsCaptureForm obsCaptureForm;
+        private BrowserAudioServer browserAudio;
         private bool isEnrichingVoicePack;
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
@@ -226,10 +228,7 @@ namespace ReportTimePlayer
         {
             InitializeTrayIcon();
             LoadGlobalConfig();
-            obsCaptureForm = new ObsCaptureForm(() => PreviewAnnouncement(DateTime.Now.Hour, globalConfig), StopPreview, OpenSettings);
-            obsCaptureForm.Show();
-            try { audio = new AnnouncementAudio(); audio.Start(); }
-            catch (Exception ex) { notifyIcon.ShowBalloonTip(3000, "音频初始化失败", ex.Message, ToolTipIcon.Warning); }
+            StartBrowserAudio();
             SetAutoRun();
 
             // 新增：检测并播放特殊语音（仅在指定日期首次运行时播放）
@@ -253,6 +252,7 @@ namespace ReportTimePlayer
             notifyIcon.Icon = File.Exists(iconPath) ? new Icon(iconPath) : SystemIcons.Application;
             notifyIcon.Text = $"PoiTime! (当前ID：{currentId})";
             notifyIcon.Visible = true;
+            notifyIcon.DoubleClick += (sender, e) => OpenSettings();
 
             // 创建现代化菜单
             var contextMenu = new ContextMenuStrip();
@@ -267,7 +267,7 @@ namespace ReportTimePlayer
                 CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
                 CreateMenuItem("试听当前时刻报时", "\uE768", (sender, e) => PreviewAnnouncement(DateTime.Now.Hour, globalConfig)),
                 CreateMenuItem("停止试听", "\uE71A", (sender, e) => StopPreview()),
-                CreateMenuItem("OBS 音频采集窗口", "\uE7F4", (sender, e) => obsCaptureForm?.Restore()),
+                CreateMenuItem("复制 OBS 浏览器源地址", "\uE7F4", (sender, e) => CopyBrowserSourceUrl()),
                 CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
                 CreateMenuItem("从 Wiki 补全立绘和台词", "\uE753", async (sender, e) => await EnrichCurrentVoicePackAsync()),
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
@@ -458,12 +458,28 @@ namespace ReportTimePlayer
             notifyIcon.ShowBalloonTip(2000, "重载配置", $"成功加载{shipName}语音包", ToolTipIcon.Info);
         }
 
-        private void OpenSettings()
+        private void StartBrowserAudio()
+        {
+            if (browserAudio != null) return;
+            try { browserAudio = new BrowserAudioServer(globalConfig.browserPort); }
+            catch (Exception ex) { notifyIcon.ShowBalloonTip(3000, "浏览器源启动失败", ex.Message, ToolTipIcon.Error); }
+        }
+
+        private void CopyBrowserSourceUrl()
+        {
+            StartBrowserAudio();
+            if (browserAudio == null) return;
+            Clipboard.SetText(browserAudio.Url);
+            notifyIcon.ShowBalloonTip(3000, "地址已复制", "在 OBS 浏览器源中粘贴地址，并勾选「通过 OBS 控制音频」。", ToolTipIcon.Info);
+        }
+
+        internal void OpenSettings()
         {
             using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncement, StopPreview))
             {
                 if (form.ShowDialog() != DialogResult.OK) return;
                 globalConfig = form.Draft;
+                if (globalConfig.audioOutput == "Browser") { audio?.Dispose(); audio = null; }
                 try
                 {
                     File.WriteAllText(configPath, JsonSerializer.Serialize(globalConfig, new JsonSerializerOptions { WriteIndented = true }));
@@ -647,6 +663,7 @@ namespace ReportTimePlayer
         private void StopPreview()
         {
             audio?.StopPreview();
+            browserAudio?.StopPreview();
             announcementPopup?.Close();
             announcementPopup = null;
         }
@@ -673,8 +690,26 @@ namespace ReportTimePlayer
             {
                 try
                 {
-                    if (audio == null) audio = new AnnouncementAudio();
-                    var duration = audio.Play(filePath, settings.volume, preview);
+                    TimeSpan duration;
+                    bool local = settings.audioOutput == "Local" || settings.audioOutput == "Both";
+                    bool browser = settings.audioOutput != "Local";
+                    if (local)
+                    {
+                        if (audio == null) audio = new AnnouncementAudio();
+                        duration = audio.Play(filePath, settings.volume, preview);
+                    }
+                    else
+                    {
+                        using (var reader = new AudioFileReader(filePath)) duration = reader.TotalTime;
+                    }
+                    if (browser)
+                    {
+                        StartBrowserAudio();
+                        if (browserAudio == null) throw new InvalidOperationException("浏览器音频服务未启动，请检查端口是否被占用。");
+                        if (preview && !browserAudio.HasListener)
+                            notifyIcon.ShowBalloonTip(3000, "浏览器源未连接", "请在 OBS 添加浏览器源并使用复制的地址，然后再次试听。", ToolTipIcon.Info);
+                        browserAudio.Play(filePath, settings.volume, preview);
+                    }
                     if (settings.showAnnouncement)
                     {
                         try { ShowAnnouncement(string.IsNullOrWhiteSpace(line) ? fallbackLine : line, duration, settings); }
@@ -757,7 +792,7 @@ namespace ReportTimePlayer
         {
             StopPreview();
             audio?.Dispose();
-            obsCaptureForm?.Dispose();
+            browserAudio?.Dispose();
             timer.Stop();
             timer.Dispose();
             announcementPopup?.Close();
@@ -775,7 +810,7 @@ namespace ReportTimePlayer
             {
                 timer?.Dispose();
                 audio?.Dispose();
-                obsCaptureForm?.Dispose();
+                browserAudio?.Dispose();
                 announcementPopup?.Dispose();
                 notifyIcon?.Dispose();
             }
@@ -789,7 +824,7 @@ namespace ReportTimePlayer
         /// 应用程序的主入口点
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             bool createdNew;
 
@@ -810,7 +845,14 @@ namespace ReportTimePlayer
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new ReportTimeContext());
+                var context = new ReportTimeContext();
+                if (args.Contains("--settings"))
+                {
+                    EventHandler open = null;
+                    open = (sender, e) => { Application.Idle -= open; context.OpenSettings(); };
+                    Application.Idle += open;
+                }
+                Application.Run(context);
             }
         }
     }

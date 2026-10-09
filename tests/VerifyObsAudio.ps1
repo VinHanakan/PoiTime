@@ -6,6 +6,7 @@ $resolver=[ResolveEventHandler]{param($sender,$args) $path=Join-Path $dir ((New-
 [AppDomain]::CurrentDomain.add_AssemblyResolve($resolver)
 $a=[Reflection.Assembly]::LoadFrom((Join-Path $dir 'PoiTime.exe'))
 $c=New-Object ReportTimePlayer.Config
+$c.audioOutput="Local"
 $c.backgroundColor='#224466'; $c.backgroundOpacity=0
 $b=[ReportTimePlayer.AnnouncementPopup]::RenderSurface('test','line','',$c)
 if($b.GetPixel(0,0).A -ne 0){throw 'transparent background failed'}
@@ -60,10 +61,4 @@ if($audio.Read($samples,0,1000) -ne 1000){throw 'idle buffer not filled'}
 if(($samples | Where-Object {$_ -ne 0}).Count -ne 0){throw 'idle audio not silent'}
 $audio.Dispose(); $audio.Dispose()
 $icon.Dispose()
-$anchor=New-Object ReportTimePlayer.ObsCaptureForm(([Action]{}),([Action]{}),([Action]{}))
-$anchor.Show(); [Windows.Forms.Application]::DoEvents(); $handle=$anchor.Handle
-if(!$anchor.Visible -or $anchor.WindowState -ne 'Minimized'){throw 'capture window missing while minimized'}
-$anchor.Restore(); $anchor.Close(); [Windows.Forms.Application]::DoEvents()
-if($anchor.IsDisposed -or $anchor.Handle -ne $handle -or $anchor.WindowState -ne 'Minimized'){throw 'capture window closed instead of minimizing'}
-$anchor.Dispose()
-'PASS: alpha rendering, settings draft, 15 repeated previews, same audio session after stop/EOF, exact silent idle, persistent minimized capture window'
+'PASS: alpha rendering, settings draft, 15 repeated local previews, persistent audio session after stop/EOF, exact silent idle'
