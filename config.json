@@ -9,5 +9,14 @@
   "backgroundColor": "#1C202B",
   "backgroundOpacity": 100,
   "audioOutput": "Both",
-  "browserPort": 18742
+  "browserPort": 18742,
+  "browserShowAnnouncement": true,
+  "showPortrait": true,
+  "showName": true,
+  "showLine": true,
+  "fontFamily": "微软雅黑",
+  "fontSize": 10,
+  "fontBold": false,
+  "fontItalic": false,
+  "textColor": "#FFFFFF"
 }

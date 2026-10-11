@@ -61,16 +61,21 @@ namespace ReportTimePlayer
                         } catch { g.CompositingMode = CompositingMode.SourceOver; }
                     }
                     bool portrait = false;
-                    if (File.Exists(portraitPath)) {
+                    if (settings.showPortrait && File.Exists(portraitPath)) {
                         try { using (var image = Image.FromFile(portraitPath)) { float scale = Math.Min(120f / image.Width, 234f / image.Height); float w = image.Width * scale, h = image.Height * scale; g.DrawImage(image, 8 + (120 - w) / 2, 8 + (234 - h) / 2, w, h); portrait = true; } } catch { }
                     }
                     int left = portrait ? 137 : 18, width = portrait ? 210 : 325;
                     g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                    using (var titleFont = new Font("微软雅黑", 11, FontStyle.Bold))
-                    using (var lineFont = new Font("微软雅黑", 10))
+                    float size = float.IsNaN(settings.fontSize) || float.IsInfinity(settings.fontSize) ? 10 : Math.Max(8, Math.Min(32, settings.fontSize));
+                    Color textColor;
+                    try { textColor = ColorTranslator.FromHtml(settings.textColor); } catch { textColor = Color.White; }
+                    using (var brush = new SolidBrush(textColor))
+                    using (var titleFont = new Font(settings.fontFamily ?? "微软雅黑", size + 1, (settings.fontBold ? FontStyle.Bold : FontStyle.Regular) | (settings.fontItalic ? FontStyle.Italic : FontStyle.Regular)))
+                    using (var lineFont = new Font(settings.fontFamily ?? "微软雅黑", size, (settings.fontBold ? FontStyle.Bold : FontStyle.Regular) | (settings.fontItalic ? FontStyle.Italic : FontStyle.Regular)))
                     using (var format = new StringFormat { Trimming = StringTrimming.EllipsisCharacter }) {
-                        g.DrawString(name ?? "", titleFont, Brushes.White, new RectangleF(left, 35, width, 32), format);
-                        g.DrawString(line ?? "", lineFont, Brushes.White, new RectangleF(left, 75, width, 145), format);
+                        if (settings.showName) g.DrawString(name ?? "", titleFont, brush, new RectangleF(left, 25, width, Math.Max(32, size * 2)), format);
+                        float top = settings.showName ? 30 + Math.Max(32, size * 2) : 25;
+                        if (settings.showLine) g.DrawString(line ?? "", lineFont, brush, new RectangleF(left, top, width, 230 - top), format);
                     }
                 }
                 return bitmap;

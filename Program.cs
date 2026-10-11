@@ -33,6 +33,15 @@ namespace ReportTimePlayer
         public int backgroundOpacity { get; set; } = 100;
         public string audioOutput { get; set; } = "Both";
         public int browserPort { get; set; } = 18742;
+        public bool browserShowAnnouncement { get; set; } = true;
+        public bool showPortrait { get; set; } = true;
+        public bool showName { get; set; } = true;
+        public bool showLine { get; set; } = true;
+        public string fontFamily { get; set; } = "微软雅黑";
+        public float fontSize { get; set; } = 10;
+        public bool fontBold { get; set; }
+        public bool fontItalic { get; set; }
+        public string textColor { get; set; } = "#FFFFFF";
     }
 
     // 单条报时语音配置，包含报时的小时、分钟和对应的文件名
@@ -475,7 +484,7 @@ namespace ReportTimePlayer
 
         internal void OpenSettings()
         {
-            using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncement, StopPreview))
+            using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncementWithLine, StopPreview, h => voiceFolderConfig?.voices?.FirstOrDefault(a => a.hour == h)?.text))
             {
                 if (form.ShowDialog() != DialogResult.OK) return;
                 globalConfig = form.Draft;
@@ -483,6 +492,15 @@ namespace ReportTimePlayer
                 try
                 {
                     File.WriteAllText(configPath, JsonSerializer.Serialize(globalConfig, new JsonSerializerOptions { WriteIndented = true }));
+                    if (form.EditedLines.Count > 0 && voiceFolderConfig?.voices != null)
+                    {
+                        foreach (var edit in form.EditedLines)
+                        {
+                            var voice = voiceFolderConfig.voices.FirstOrDefault(a => a.hour == edit.Key);
+                            if (voice != null) voice.text = edit.Value;
+                        }
+                        File.WriteAllText(Path.Combine(voiceFolder, "config.json"), JsonSerializer.Serialize(voiceFolderConfig, new JsonSerializerOptions { WriteIndented = true }));
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -668,7 +686,9 @@ namespace ReportTimePlayer
             announcementPopup = null;
         }
 
-        private void PreviewAnnouncement(int hour, Config settings)
+        private void PreviewAnnouncement(int hour, Config settings) => PreviewAnnouncementWithLine(hour, settings, null);
+
+        private void PreviewAnnouncementWithLine(int hour, Config settings, string line)
         {
             var announcement = voiceFolderConfig?.voices?.FirstOrDefault(a => a.hour == hour);
             if (announcement == null)
@@ -677,7 +697,7 @@ namespace ReportTimePlayer
                 return;
             }
             StopPreview();
-            PlayAnnouncement(announcement.fileName, announcement.text,
+            PlayAnnouncement(announcement.fileName, line ?? announcement.text,
                 $"{announcement.hour:D2}:{announcement.minute:D2}", settings, true);
         }
 
@@ -702,13 +722,25 @@ namespace ReportTimePlayer
                     {
                         using (var reader = new AudioFileReader(filePath)) duration = reader.TotalTime;
                     }
-                    if (browser)
+                    if (browser || settings.browserShowAnnouncement)
                     {
                         StartBrowserAudio();
                         if (browserAudio == null) throw new InvalidOperationException("浏览器音频服务未启动，请检查端口是否被占用。");
                         if (preview && !browserAudio.HasListener)
                             notifyIcon.ShowBalloonTip(3000, "浏览器源未连接", "请在 OBS 添加浏览器源并使用复制的地址，然后再次试听。", ToolTipIcon.Info);
-                        browserAudio.Play(filePath, settings.volume, preview);
+                        byte[] visual = null;
+                        if (settings.browserShowAnnouncement)
+                        {
+                            try
+                            {
+                                using (var bitmap = AnnouncementPopup.RenderSurface(voiceFolderConfig?.name ?? currentId,
+                                    string.IsNullOrWhiteSpace(line) ? fallbackLine : line, GetPortraitPath(), settings))
+                                using (var stream = new MemoryStream())
+                                { bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png); visual = stream.ToArray(); }
+                            }
+                            catch (Exception ex) { notifyIcon.ShowBalloonTip(3000, "网页图像错误", ex.Message, ToolTipIcon.Error); }
+                        }
+                        browserAudio.Play(browser ? filePath : null, settings.volume, preview, visual, settings.announcementPosition, duration);
                     }
                     if (settings.showAnnouncement)
                     {
@@ -727,12 +759,17 @@ namespace ReportTimePlayer
             }
         }
 
+        private string GetPortraitPath()
+        {
+            string name = voiceFolderConfig?.portrait;
+            if (string.IsNullOrWhiteSpace(name)) name = "portrait.png";
+            return Path.Combine(voiceFolder, Path.GetFileName(name));
+        }
+
         private void ShowAnnouncement(string line, TimeSpan duration, Config settings)
         {
             announcementPopup?.Close();
-            string portraitName = voiceFolderConfig?.portrait;
-            if (string.IsNullOrWhiteSpace(portraitName)) portraitName = "portrait.png";
-            string portraitPath = Path.Combine(voiceFolder, Path.GetFileName(portraitName));
+            string portraitPath = GetPortraitPath();
             announcementPopup = new AnnouncementPopup(
                 voiceFolderConfig?.name ?? currentId, line, portraitPath,
                 settings, duration);

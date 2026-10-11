@@ -33,14 +33,21 @@ namespace ReportTimePlayer
             listener.Start();
             _ = AcceptAsync();
         }
-        public void Play(string path, int volume, bool preview)
+        public void Play(string path, int volume, bool preview) => Play(path, volume, preview, null, "BottomRight", TimeSpan.FromSeconds(3));
+        public void Play(string path, int volume, bool preview, byte[] visual, string position, TimeSpan duration)
         {
+            if (string.IsNullOrWhiteSpace(path)) path = null;
             lock (gate)
             {
                 Prune();
                 string id = Guid.NewGuid().ToString("N");
-                assets[id] = new AudioAsset { Path = path, Created = DateTime.UtcNow };
-                events.Add(new BrowserEvent { sequence = ++sequence, kind = "play", url = "audio/" + id, volume = Math.Max(0, Math.Min(100, volume)) / 100.0, preview = preview, Created = DateTime.UtcNow });
+                if (path != null) assets[id] = new AudioAsset { Path = path, Created = DateTime.UtcNow };
+                string visualId = Guid.NewGuid().ToString("N");
+                if (visual != null) assets[visualId] = new AudioAsset { Image = (byte[])visual.Clone(), Created = DateTime.UtcNow };
+                events.Add(new BrowserEvent { sequence = ++sequence, kind = "play", url = path == null ? null : "audio/" + id,
+                    visualUrl = visual == null ? null : "image/" + visualId, position = position,
+                    durationMs = (int)Math.Max(3000, Math.Min(60000, duration.TotalMilliseconds + 500)),
+                    volume = Math.Max(0, Math.Min(100, volume)) / 100.0, preview = preview, Created = DateTime.UtcNow });
             }
         }
         public void StopPreview()
@@ -115,10 +122,16 @@ namespace ReportTimePlayer
                         lock (gate) { lastPoll = DateTime.UtcNow; Prune(); pending = events.Where(e => e.sequence > after && e.Created > DateTime.UtcNow.AddSeconds(-15)).ToArray(); }
                         await Json(stream, pending);
                     }
+                    else if (uri.AbsolutePath.StartsWith("/image/", StringComparison.Ordinal))
+                    {
+                        AudioAsset asset; lock (gate) assets.TryGetValue(uri.AbsolutePath.Substring(7), out asset);
+                        if (asset?.Image == null) { await Respond(stream, 404, "text/plain", new byte[0]); return; }
+                        await Respond(stream, 200, "image/png", asset.Image);
+                    }
                     else if (uri.AbsolutePath.StartsWith("/audio/", StringComparison.Ordinal))
                     {
                         AudioAsset asset; lock (gate) assets.TryGetValue(uri.AbsolutePath.Substring(7), out asset);
-                        if (asset == null || !File.Exists(asset.Path)) { await Respond(stream, 404, "text/plain", new byte[0]); return; }
+                        if (asset == null || asset.Path == null || !File.Exists(asset.Path)) { await Respond(stream, 404, "text/plain", new byte[0]); return; }
                         var bytes = File.ReadAllBytes(asset.Path);
                         string mime = Path.GetExtension(asset.Path).Equals(".wav", StringComparison.OrdinalIgnoreCase) ? "audio/wav" : "audio/mpeg";
                         await Respond(stream, 200, mime, bytes);
@@ -148,10 +161,13 @@ namespace ReportTimePlayer
             public long sequence { get; set; }
             public string kind { get; set; }
             public string url { get; set; }
+            public string visualUrl { get; set; }
+            public string position { get; set; }
+            public int durationMs { get; set; }
             public double volume { get; set; }
             public bool preview { get; set; }
             [System.Text.Json.Serialization.JsonIgnore] public DateTime Created { get; set; }
         }
-        private sealed class AudioAsset { public string Path; public DateTime Created; }
+        private sealed class AudioAsset { public byte[] Image; public string Path; public DateTime Created; }
     }
 }

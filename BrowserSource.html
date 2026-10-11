@@ -1,48 +1,58 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>PoiTime OBS 音频源</title>
-<style>html,body{margin:0;background:transparent;overflow:hidden}</style></head><body>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>PoiTime OBS 立绘与台词</title>
+<style>
+html,body{margin:0;background:transparent;overflow:hidden}
+#stage{position:fixed;inset:0;display:flex;pointer-events:none;padding:16px;box-sizing:border-box;justify-content:flex-end;align-items:flex-end}
+#announcement{display:none;width:360px;height:250px;object-fit:contain;max-width:100%;max-height:100%}
+</style></head><body><div id="stage"><img id="announcement" alt="报时立绘与台词"></div>
 <script>
 'use strict';
-let cursor=0, generation=0, stopped=false;
-const playing=new Set();
-function stopPreview(){generation++; for(const item of playing){if(item.preview){item.audio.pause(); item.audio.src=''; if(item.objectUrl)URL.revokeObjectURL(item.objectUrl); playing.delete(item);}}}
+let cursor=0, generation=0, stopped=false, visualGeneration=0, visualTimer=null, visualPreview=false;
+const playing=new Set(), stage=document.getElementById('stage'), announcement=document.getElementById('announcement');
+function hideVisual(){clearTimeout(visualTimer);visualGeneration++;announcement.style.display='none';announcement.removeAttribute('src');}
+function stopPreview(){generation++;if(visualPreview)hideVisual();for(const item of playing){if(item.preview){item.audio.pause();item.audio.src='';if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);playing.delete(item);}}}
 async function play(event){
-  const ticket=generation;
-  const item={audio:new Audio(),preview:event.preview,objectUrl:null};
-  playing.add(item);
+  const ticket=generation, visualTicket=++visualGeneration;
+  clearTimeout(visualTimer);announcement.style.display='none';visualPreview=event.preview;
+  const item={audio:new Audio(),preview:event.preview,objectUrl:null};playing.add(item);
   try{
-    const response=await fetch(event.url,{cache:'no-store'});
-    if(!response.ok)throw new Error('Audio HTTP '+response.status);
-    const blob=await response.blob();
-    if(stopped || !playing.has(item) || (event.preview && ticket!==generation))return;
-    item.objectUrl=URL.createObjectURL(blob);
-    item.audio.src=item.objectUrl; item.audio.volume=event.volume;
-    const cleanup=()=>{playing.delete(item); if(item.objectUrl){URL.revokeObjectURL(item.objectUrl); item.objectUrl=null;}};
-    item.audio.addEventListener('ended',cleanup,{once:true});
-    item.audio.addEventListener('error',cleanup,{once:true});
-    await item.audio.play();
-  }catch(error){playing.delete(item); if(item.objectUrl)URL.revokeObjectURL(item.objectUrl); console.error('PoiTime playback:',error);}
+    let visual=null;
+    if(event.visualUrl){visual=new Image();visual.src=event.visualUrl;try{await visual.decode();}catch(error){visual=null;console.warn('PoiTime image:',error);}}
+    if(event.url){
+      const response=await fetch(event.url,{cache:'no-store'});
+      if(!response.ok)throw new Error('Audio HTTP '+response.status);
+      const blob=await response.blob();
+      if(stopped || !playing.has(item) || (event.preview && ticket!==generation))return;
+      item.objectUrl=URL.createObjectURL(blob);item.audio.src=item.objectUrl;item.audio.volume=event.volume;
+      const cleanup=()=>{playing.delete(item);if(item.objectUrl){URL.revokeObjectURL(item.objectUrl);item.objectUrl=null;}};
+      item.audio.addEventListener('ended',cleanup,{once:true});item.audio.addEventListener('error',cleanup,{once:true});
+      await item.audio.play();
+    }else{playing.delete(item);}
+    if(stopped || (event.preview && ticket!==generation))return;
+    if(visual && visualTicket===visualGeneration){
+      const positions={TopLeft:['flex-start','flex-start'],TopRight:['flex-end','flex-start'],Center:['center','center'],BottomLeft:['flex-start','flex-end'],BottomRight:['flex-end','flex-end']};
+      const position=positions[event.position] || positions.BottomRight;stage.style.justifyContent=position[0];stage.style.alignItems=position[1];
+      announcement.src=visual.src;announcement.style.display='block';
+      visualTimer=setTimeout(()=>{if(visualTicket===visualGeneration)hideVisual();},Math.max(3000,Math.min(60000,event.durationMs || 3000)));
+    }
+  }catch(error){playing.delete(item);if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);console.error('PoiTime playback:',error);}
 }
 async function connect(){
   while(!stopped){
     try{
-      const response=await fetch('status',{cache:'no-store',signal:AbortSignal.timeout(5000)});
-      if(!response.ok)throw new Error('Disconnected');
+      const response=await fetch('status',{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!response.ok)throw new Error('Disconnected');
       cursor=(await response.json()).sequence;
       while(!stopped){
-        const result=await fetch('events?after='+cursor,{cache:'no-store',signal:AbortSignal.timeout(5000)});
-        if(!result.ok)throw new Error('Disconnected');
+        const result=await fetch('events?after='+cursor,{cache:'no-store',signal:AbortSignal.timeout(5000)});if(!result.ok)throw new Error('Disconnected');
         for(const event of await result.json()){
-          if(event.sequence<=cursor)continue;
-          cursor=event.sequence;
-          if(event.kind==='stopPreview')stopPreview();
-          else if(event.kind==='play')void play(event);
+          if(event.sequence<=cursor)continue;cursor=event.sequence;
+          if(event.kind==='stopPreview')stopPreview();else if(event.kind==='play')void play(event);
         }
         await new Promise(resolve=>setTimeout(resolve,150));
       }
-    }catch(error){ console.warn('PoiTime reconnecting:',error); await new Promise(resolve=>setTimeout(resolve,1000)); }
+    }catch(error){console.warn('PoiTime reconnecting:',error);await new Promise(resolve=>setTimeout(resolve,1000));}
   }
 }
-window.addEventListener('pagehide',()=>{stopped=true;for(const item of playing){item.audio.pause();if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);}playing.clear();});
+window.addEventListener('pagehide',()=>{stopped=true;hideVisual();for(const item of playing){item.audio.pause();if(item.objectUrl)URL.revokeObjectURL(item.objectUrl);}playing.clear();});
 void connect();
 </script></body></html>
