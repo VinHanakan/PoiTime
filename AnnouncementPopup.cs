@@ -73,13 +73,30 @@ namespace ReportTimePlayer
                     using (var titleFont = new Font(settings.fontFamily ?? "微软雅黑", size + 1, (settings.fontBold ? FontStyle.Bold : FontStyle.Regular) | (settings.fontItalic ? FontStyle.Italic : FontStyle.Regular)))
                     using (var lineFont = new Font(settings.fontFamily ?? "微软雅黑", size, (settings.fontBold ? FontStyle.Bold : FontStyle.Regular) | (settings.fontItalic ? FontStyle.Italic : FontStyle.Regular)))
                     using (var format = new StringFormat { Trimming = StringTrimming.EllipsisCharacter }) {
-                        if (settings.showName) g.DrawString(name ?? "", titleFont, brush, new RectangleF(left, 25, width, Math.Max(32, size * 2)), format);
+                        if (settings.showName) DrawText(g, name ?? "", titleFont, brush, new RectangleF(left, 25, width, Math.Max(32, size * 2)), format, settings);
                         float top = settings.showName ? 30 + Math.Max(32, size * 2) : 25;
-                        if (settings.showLine) g.DrawString(line ?? "", lineFont, brush, new RectangleF(left, top, width, 230 - top), format);
+                        if (settings.showLine) DrawText(g, line ?? "", lineFont, brush, new RectangleF(left, top, width, 230 - top), format, settings);
                     }
                 }
                 return bitmap;
             } catch { bitmap.Dispose(); throw; }
+        }
+        private static void DrawText(Graphics graphics, string text, Font font, Brush fill, RectangleF bounds, StringFormat format, Config settings)
+        {
+            if (!settings.textOutline) { graphics.DrawString(text, font, fill, bounds, format); return; }
+            Color color;
+            try { color = ColorTranslator.FromHtml(settings.textOutlineColor); } catch { color = Color.Black; }
+            float width = float.IsNaN(settings.textOutlineWidth) || float.IsInfinity(settings.textOutlineWidth) ? 2 : Math.Max(.5f, Math.Min(8, settings.textOutlineWidth));
+            using (var path = new GraphicsPath())
+            using (var pen = new Pen(color, width) { LineJoin = LineJoin.Round }) {
+                path.AddString(text, font.FontFamily, (int)font.Style, font.SizeInPoints * graphics.DpiY / 72f, bounds, format);
+                var state = graphics.Save();
+                try {
+                    graphics.SetClip(RectangleF.Inflate(bounds, width, width), CombineMode.Intersect);
+                    graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    graphics.DrawPath(pen, path); graphics.FillPath(fill, path);
+                } finally { graphics.Restore(state); }
+            }
         }
         protected override void OnShown(EventArgs e)
         {

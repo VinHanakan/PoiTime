@@ -13,7 +13,9 @@ namespace ReportTimePlayer
         private readonly CheckBox desktopBox, browserBox, portraitBox, nameBox, lineBox;
         private readonly ComboBox positionBox, backgroundBox, outputBox;
         private readonly TextBox imagePathBox, lineEditor;
-        private Color backgroundColor, textColor;
+        private Color backgroundColor, textColor, outlineColor;
+        private readonly CheckBox outlineBox;
+        private readonly NumericUpDown outlineWidth;
         private string fontFamily;
         private float fontSize;
         private bool fontBold, fontItalic;
@@ -28,6 +30,7 @@ namespace ReportTimePlayer
             backgroundMode = backgroundBox.SelectedIndex == 1 ? "Image" : "Color",
             backgroundImage = imagePathBox.Text, backgroundColor = ColorTranslator.ToHtml(backgroundColor), backgroundOpacity = opacitySlider.Value,
             fontFamily = fontFamily, fontSize = fontSize, fontBold = fontBold, fontItalic = fontItalic, textColor = ColorTranslator.ToHtml(textColor),
+            textOutline = outlineBox.Checked, textOutlineColor = ColorTranslator.ToHtml(outlineColor), textOutlineWidth = (float)outlineWidth.Value,
             audioOutput = new[] { "Both", "Local", "Browser" }[outputBox.SelectedIndex], browserPort = original.browserPort
         };
         public AnnouncementSettingsForm(Config config, Action<int, Config> preview, Action stop)
@@ -38,8 +41,8 @@ namespace ReportTimePlayer
             ClientSize = new Size(500, 590); FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false;
             var tabs = new TabControl { Location = new Point(16, 16), Size = new Size(468, 480) };
-            var audio = new TabPage("音频输出"); var appearance = new TabPage("立绘与台词"); var dialogue = new TabPage("编辑台词");
-            tabs.TabPages.AddRange(new[] { audio, appearance, dialogue }); Controls.Add(tabs);
+            var audio = new TabPage("音频输出"); var appearance = new TabPage("立绘与台词"); var dialogue = new TabPage("编辑台词"); var typography = new TabPage("文字样式");
+            tabs.TabPages.AddRange(new[] { audio, appearance, typography, dialogue }); Controls.Add(tabs);
             LabelAt(audio, "音量（本机和浏览器共用）", 16, 20);
             var volumeValue = LabelAt(audio, "", 365, 20);
             volumeSlider = new TrackBar { Minimum = 0, Maximum = 100, Value = Math.Max(0, Math.Min(100, config.volume)), TickFrequency = 10, Location = new Point(16, 45), Size = new Size(420, 45) };
@@ -74,12 +77,26 @@ namespace ReportTimePlayer
             opacitySlider = new TrackBar { Minimum = 0, Maximum = 100, Value = Math.Max(0, Math.Min(100, config.backgroundOpacity)), TickFrequency = 10, Location = new Point(16, 245), Size = new Size(420, 45) };
             opacityValue.Text = opacitySlider.Value + "%"; opacitySlider.ValueChanged += (s, e) => opacityValue.Text = opacitySlider.Value + "%";
             fontFamily = config.fontFamily ?? "微软雅黑"; fontSize = float.IsNaN(config.fontSize) || float.IsInfinity(config.fontSize) ? 10 : Math.Max(8, Math.Min(32, config.fontSize)); fontBold = config.fontBold; fontItalic = config.fontItalic;
-            var fontButton = new Button { Text = "设置字体、字号和文字颜色…", Location = new Point(16, 307), Size = new Size(300, 32) };
-            var fontSummary = LabelAt(appearance, "", 16, 352);
-            Action summary = () => fontSummary.Text = fontFamily + "  " + fontSize.ToString("0.#") + " 磅" + (fontBold ? "  粗体" : "") + (fontItalic ? "  斜体" : "") + "  " + ColorTranslator.ToHtml(textColor);
-            summary(); fontButton.Click += (s, e) => { using (var font = new Font(fontFamily, fontSize, (fontBold ? FontStyle.Bold : FontStyle.Regular) | (fontItalic ? FontStyle.Italic : FontStyle.Regular))) using (var dialog = new FontDialog { Font = font, Color = textColor, ShowColor = true, MinSize = 8, MaxSize = 32, FontMustExist = true, ShowEffects = false }) { if (dialog.ShowDialog(this) != DialogResult.OK) return; fontFamily = dialog.Font.Name; fontSize = dialog.Font.SizeInPoints; fontBold = dialog.Font.Bold; fontItalic = dialog.Font.Italic; textColor = dialog.Color; summary(); } };
-            LabelAt(appearance, "桌面与网页使用同一套外观；透明度仅作用于背景。", 16, 398);
-            appearance.Controls.AddRange(new Control[] { color, imagePathBox, browse, opacitySlider, fontButton });
+            var fontButton = new Button { Text = "设置字体、字号…", Location = new Point(16, 20), Size = new Size(240, 32) };
+            var fontSummary = LabelAt(typography, "", 16, 65);
+            Action summary = () => fontSummary.Text = fontFamily + "  " + fontSize.ToString("0.#") + " 磅" + (fontBold ? "  粗体" : "") + (fontItalic ? "  斜体" : "");
+            summary(); fontButton.Click += (s, e) => { using (var font = new Font(fontFamily, fontSize, (fontBold ? FontStyle.Bold : FontStyle.Regular) | (fontItalic ? FontStyle.Italic : FontStyle.Regular))) using (var dialog = new FontDialog { Font = font, MinSize = 8, MaxSize = 32, FontMustExist = true, ShowEffects = false }) { if (dialog.ShowDialog(this) != DialogResult.OK) return; fontFamily = dialog.Font.Name; fontSize = dialog.Font.SizeInPoints; fontBold = dialog.Font.Bold; fontItalic = dialog.Font.Italic; summary(); } };
+            LabelAt(typography, "文字颜色", 16, 115);
+            var textButton = ColorButton(typography, textColor, 125, 108, value => textColor = value);
+            outlineBox = Check(typography, "启用文字描边", 16, 172, config.textOutline);
+            outlineColor = ParseColor(config.textOutlineColor, Color.Black);
+            LabelAt(typography, "描边颜色", 16, 218);
+            var outlineButton = ColorButton(typography, outlineColor, 125, 211, value => outlineColor = value);
+            LabelAt(typography, "描边粗细", 16, 274);
+            float stroke = float.IsNaN(config.textOutlineWidth) || float.IsInfinity(config.textOutlineWidth) ? 2 : Math.Max(.5f, Math.Min(8, config.textOutlineWidth));
+            outlineWidth = new NumericUpDown { Minimum = .5m, Maximum = 8, DecimalPlaces = 1, Increment = .5m, Value = (decimal)stroke, Location = new Point(125, 270), Size = new Size(90, 26) };
+            LabelAt(typography, "像素（0.5–8）", 228, 274);
+            Action updateOutline = () => outlineButton.Enabled = outlineWidth.Enabled = outlineBox.Checked;
+            outlineBox.CheckedChanged += (s, e) => updateOutline(); updateOutline();
+            LabelAt(typography, "文字颜色和描边同时应用于名字与台词。\n透明背景建议保留描边，可用「试听 / 预览」查看效果。", 16, 330);
+            typography.Controls.AddRange(new Control[] { fontButton, outlineWidth });
+            LabelAt(appearance, "字体、文字颜色和描边请在「文字样式」页设置。\n桌面与网页共用外观；透明度仅作用于背景。", 16, 315);
+            appearance.Controls.AddRange(new Control[] { color, imagePathBox, browse, opacitySlider });
             Action update = () => { imagePathBox.Enabled = browse.Enabled = backgroundBox.SelectedIndex == 1; color.Enabled = backgroundBox.SelectedIndex == 0; };
             backgroundBox.SelectedIndexChanged += (s, e) => update(); update();
 
@@ -98,6 +115,14 @@ namespace ReportTimePlayer
             var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, Location = new Point(409, 551), Size = new Size(75, 28) };
             Controls.AddRange(new Control[] { hour, play, stopButton, save, cancel }); AcceptButton = save; CancelButton = cancel;
             FormClosed += (s, e) => stop();
+        }
+        private Button ColorButton(Control parent, Color initial, int x, int y, Action<Color> changed)
+        {
+            var button = new Button { Location = new Point(x, y), Size = new Size(230, 32) };
+            Color selected = initial;
+            Action refresh = () => { button.Text = "选择颜色…  " + ColorTranslator.ToHtml(selected); button.BackColor = selected; button.ForeColor = selected.GetBrightness() < .5 ? Color.White : Color.Black; };
+            refresh(); button.Click += (s, e) => { using (var dialog = new ColorDialog { Color = selected, FullOpen = true }) { if (dialog.ShowDialog(this) != DialogResult.OK) return; selected = dialog.Color; changed(selected); refresh(); } };
+            parent.Controls.Add(button); return button;
         }
         private static Color ParseColor(string value, Color fallback) { try { return ColorTranslator.FromHtml(value); } catch { return fallback; } }
         private static CheckBox Check(Control parent, string text, int x, int y, bool value) { var box = new CheckBox { Text = text, Checked = value, AutoSize = true, Location = new Point(x, y) }; parent.Controls.Add(box); return box; }

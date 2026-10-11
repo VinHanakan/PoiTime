@@ -1,4 +1,4 @@
-{
+﻿{
   "id": "144",
   "randomVoices": false,
   "volume": 100,
@@ -18,5 +18,8 @@
   "fontSize": 10,
   "fontBold": false,
   "fontItalic": false,
-  "textColor": "#FFFFFF"
+  "textColor": "#FFFFFF",
+  "textOutline": true,
+  "textOutlineColor": "#000000",
+  "textOutlineWidth": 2
 }

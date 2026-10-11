@@ -2,7 +2,7 @@
 
 ![GitHub](https://img.shields.io/badge/Language-C%23-blue) 
 ![GitHub](https://img.shields.io/badge/Platform-Windows-lightgrey) 
-![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.6-green)
+![GitHub](https://img.shields.io/badge/Version-1.3.0--beta.7-green)
 
 **请使用release版本，仓库代码更新不一定及时**
 
@@ -112,6 +112,7 @@ It silently runs in the system tray and plays character voices at scheduled time
 
 - 「立绘与台词」可独立开启桌面和浏览器显示，分别控制立绘、角色名字、台词是否显示。
 - 桌面和网页共用位置、背景图片或纯色、背景不透明度，以及字体、字号（8–32 磅）、粗体、斜体、文字颜色。透明度只影响背景，立绘与文字保持清晰。
+- 「文字样式」页提供独立文字颜色按钮，以及描边开关、描边颜色和粗细（0.5–8 像素）；默认黑色 2 像素，便于透明背景下阅读。
 - 「编辑台词」通过下方的小时选择框切换 0–23 点，编辑该小时的台词。点击「试听 / 预览」使用尚未保存的外观和台词；保存后写入当前语音包，取消保留原内容。
 - 台词留空时显示报时时间；不想显示文字时取消「显示台词」。没有立绘时仅显示文字。
 - 浏览器里报时图像随音频出现，在语音结束附近自动隐藏，停止试听会同时隐藏试听图像。仅本机音频模式也可单独向网页输出图像。

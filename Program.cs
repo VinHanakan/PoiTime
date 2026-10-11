@@ -42,6 +42,9 @@ namespace ReportTimePlayer
         public bool fontBold { get; set; }
         public bool fontItalic { get; set; }
         public string textColor { get; set; } = "#FFFFFF";
+        public bool textOutline { get; set; } = true;
+        public string textOutlineColor { get; set; } = "#000000";
+        public float textOutlineWidth { get; set; } = 2;
     }
 
     // 单条报时语音配置，包含报时的小时、分钟和对应的文件名

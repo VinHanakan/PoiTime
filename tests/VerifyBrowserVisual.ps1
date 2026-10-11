@@ -12,13 +12,18 @@ $c=New-Object ReportTimePlayer.Config
 $c.backgroundOpacity=0; $c.showName=$false; $c.showPortrait=$false; $c.showLine=$false
 $b=[ReportTimePlayer.AnnouncementPopup]::RenderSurface('name','line','',$c)
 for($x=0;$x -lt 360;$x+=7){for($y=0;$y -lt 250;$y+=7){if($b.GetPixel($x,$y).A -ne 0){throw 'hidden elements still rendered'}}}; $b.Dispose()
-$c.showLine=$true; $c.textColor='#FF0000'; $c.fontFamily='Arial'; $c.fontSize=10
+$c.textOutline=$false; $c.showLine=$true; $c.textColor='#FF0000'; $c.fontFamily='Arial'; $c.fontSize=10
 function ColoredPixels($bitmap){$count=0;for($x=0;$x -lt 360;$x++){for($y=0;$y -lt 250;$y++){$p=$bitmap.GetPixel($x,$y);if($p.A -gt 150 -and $p.R -gt 200 -and $p.G -lt 40 -and $p.B -lt 40){$count++}}};return $count}
 $small=[ReportTimePlayer.AnnouncementPopup]::RenderSurface('','TEST TEXT','',$c); $smallCount=ColoredPixels $small; $small.Dispose()
 $c.fontSize=24; $c.fontBold=$true
 $b=[ReportTimePlayer.AnnouncementPopup]::RenderSurface('','TEST TEXT','',$c); $largeCount=ColoredPixels $b
 if($smallCount -le 0 -or $largeCount -le $smallCount){throw 'font/color settings not applied'}
 $b.Save((Join-Path $dir 'visual-text-check.png')); $stream=New-Object IO.MemoryStream; $b.Save($stream,[Drawing.Imaging.ImageFormat]::Png); $png=$stream.ToArray(); $stream.Dispose(); $b.Dispose()
+$c.textOutline=$true; $c.textOutlineColor='#00FF00'; $c.textOutlineWidth=4
+$outlined=[ReportTimePlayer.AnnouncementPopup]::RenderSurface('','TEST TEXT','',$c)
+$green=0;for($x=0;$x -lt 360;$x++){for($y=0;$y -lt 250;$y++){$p=$outlined.GetPixel($x,$y);if($p.A -gt 150 -and $p.G -gt 200 -and $p.R -lt 40){$green++}}}
+if($green -le 0 -or (ColoredPixels $outlined) -le 0 -or $outlined.GetPixel(0,0).A -ne 0){throw 'outline color/fill/transparency incorrect'}
+$outlined.Save((Join-Path $dir 'outline-check.png'));$outlined.Dispose()
 $probe=New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback,0);$probe.Start();$port=$probe.LocalEndpoint.Port;$probe.Stop()
 $server=New-Object ReportTimePlayer.BrowserAudioServer($port);$http=New-Object Net.Http.HttpClient
 try{
@@ -44,6 +49,7 @@ if($editor.Text -ne 'Original-13'){throw 'hour editor failed to switch'}
 $hour.Value=12
 if($editor.Text -ne 'Edited at twelve' -or $form.EditedLines[12] -ne 'Edited at twelve'){throw 'staged dialogue lost'}
 if($form.Draft.fontSize -ne 24 -or [Drawing.ColorTranslator]::FromHtml($form.Draft.textColor).ToArgb() -ne [Drawing.Color]::Red.ToArgb() -or !$form.Draft.browserShowAnnouncement){throw 'appearance draft not retained'}
-$form.Show();[Windows.Forms.Application]::DoEvents(); $tabs=$form.Controls | Where-Object {$_ -is [Windows.Forms.TabControl]};$tabs.SelectedIndex=1
+if(!$form.Draft.textOutline -or $form.Draft.textOutlineWidth -ne 4 -or [Drawing.ColorTranslator]::FromHtml($form.Draft.textOutlineColor).ToArgb() -ne [Drawing.Color]::Lime.ToArgb()){throw 'outline draft not retained'}
+$form.Show();[Windows.Forms.Application]::DoEvents(); $tabs=$form.Controls | Where-Object {$_ -is [Windows.Forms.TabControl]};$tabs.SelectedIndex=2
 $shot=New-Object Drawing.Bitmap($form.Width,$form.Height);$form.DrawToBitmap($shot,(New-Object Drawing.Rectangle(0,0,$form.Width,$form.Height)));$shot.Save((Join-Path $dir 'settings-visual-check.png'));$shot.Dispose();$form.Close();$form.Dispose()
 'PASS: visibility controls, independent background alpha, font size/style/color, identical PNG transfer, visual-only events/stop/position/duration, staged hourly dialogue editor and draft'
