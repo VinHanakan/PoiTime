@@ -27,6 +27,11 @@ namespace ReportTimePlayer
         public int volume { get; set; } = 100;
         public bool showAnnouncement { get; set; }
         public string announcementPosition { get; set; } = "BottomRight";
+        public int regionWidth { get; set; } = 360;
+        public int regionHeight { get; set; } = 0;
+        public int regionScale { get; set; } = 100;
+        public int positionOffsetX { get; set; }
+        public int positionOffsetY { get; set; }
         public string backgroundMode { get; set; } = "Color";
         public string backgroundImage { get; set; } = "";
         public string backgroundColor { get; set; } = "#1C202B";
@@ -37,6 +42,7 @@ namespace ReportTimePlayer
         public bool showPortrait { get; set; } = true;
         public bool showName { get; set; } = true;
         public bool showLine { get; set; } = true;
+        public string dialogueLanguage { get; set; } = "Chinese";
         public string fontFamily { get; set; } = "微软雅黑";
         public float fontSize { get; set; } = 10;
         public bool fontBold { get; set; }
@@ -54,6 +60,14 @@ namespace ReportTimePlayer
         public int minute { get; set; }
         public string fileName { get; set; }
         public string text { get; set; }
+        public string japaneseText { get; set; }
+        public static string FormatText(string chinese, string japanese, string mode)
+        {
+            bool hasChinese = !string.IsNullOrWhiteSpace(chinese), hasJapanese = !string.IsNullOrWhiteSpace(japanese);
+            if (mode == "Japanese") return hasJapanese ? japanese : chinese;
+            if (mode == "Bilingual" && hasChinese && hasJapanese && chinese.Trim() != japanese.Trim()) return chinese + "\n\n" + japanese;
+            return hasChinese ? chinese : japanese;
+        }
     }
 
     // 新增：特殊语音配置，包含指定日期和对应文件名
@@ -62,6 +76,14 @@ namespace ReportTimePlayer
         public string date { get; set; }
         public string fileName { get; set; }
         public string text { get; set; }
+        public string japaneseText { get; set; }
+        public static string FormatText(string chinese, string japanese, string mode)
+        {
+            bool hasChinese = !string.IsNullOrWhiteSpace(chinese), hasJapanese = !string.IsNullOrWhiteSpace(japanese);
+            if (mode == "Japanese") return hasJapanese ? japanese : chinese;
+            if (mode == "Bilingual" && hasChinese && hasJapanese && chinese.Trim() != japanese.Trim()) return chinese + "\n\n" + japanese;
+            return hasChinese ? chinese : japanese;
+        }
     }
 
     // 舰娘语音文件夹的配置，增加了 name 属性用于存储舰娘名字，同时增加 special 项
@@ -113,6 +135,26 @@ namespace ReportTimePlayer
         private AnnouncementAudio audio;
         private BrowserAudioServer browserAudio;
         private bool isEnrichingVoicePack;
+        private AnnouncementSettingsForm settingsForm;
+        private string settingsVoicesRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "voices");
+        public string CurrentVoicePackId => currentId;
+        public VoiceFolderConfig ReadVoicePack(string id) => JsonSerializer.Deserialize<VoiceFolderConfig>(File.ReadAllText(Path.Combine(VoicePackPath(id), "config.json")));
+        public string VoicePackPath(string id) => Path.Combine(settingsVoicesRoot, id);
+        public async Task<string> DownloadPackInSettingsAsync(string id, string name, Action<int, string> progress)
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(id ?? "", @"^\d+[a-z]?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) throw new ArgumentException("ID 必须为数字，可带一个字母后缀。");
+            string folder = VoicePackPath(id); Directory.CreateDirectory(folder);
+            using (var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) }) {
+                for (int h = 0; h < 24; h++) {
+                    string file = $"{id}-{h:D2}00.mp3";
+                    if (!File.Exists(Path.Combine(folder, file))) await DownloadSingleFile(client, file, folder);
+                    progress(h + 1, $"下载语音 {h + 1}/24");
+                }
+            }
+            if (!File.Exists(Path.Combine(folder, "config.json"))) CreateConfigFile(id, folder, name);
+            progress(24, "正在补全立绘和双语台词…");
+            return await TryEnrichVoicePackAsync(id, name, folder);
+        }
         // 用于记录每个报时语音上次播放时间，避免一分钟内重复播放
         private Dictionary<string, DateTime> lastPlayedAnnouncements = new Dictionary<string, DateTime>();
         public async Task CheckAndDownloadVoicePackage(string newId)
@@ -276,12 +318,12 @@ namespace ReportTimePlayer
             // 菜单项配置
             var menuItems = new ToolStripItem[]
             {
-                CreateMenuItem("修改语音包", "\uE8AC", (sender, e) => ChangeId()),
+
                 CreateMenuItem("试听当前时刻报时", "\uE768", (sender, e) => PreviewAnnouncement(DateTime.Now.Hour, globalConfig)),
                 CreateMenuItem("停止试听", "\uE71A", (sender, e) => StopPreview()),
                 CreateMenuItem("复制 OBS 浏览器源地址", "\uE7F4", (sender, e) => CopyBrowserSourceUrl()),
                 CreateMenuItem("报时设置", "\uE713", (sender, e) => OpenSettings()),
-                CreateMenuItem("从 Wiki 补全立绘和台词", "\uE753", async (sender, e) => await EnrichCurrentVoicePackAsync()),
+
                 CreateMenuItem("重载配置", "\uE117", (sender, e) => ReloadAllConfig()),
                 new ToolStripSeparator(),
                 CreateMenuItem("退出", "\uE8BB", (sender, e) => ExitApplication())
@@ -402,7 +444,7 @@ namespace ReportTimePlayer
             // 如果读取到了舰娘名字，则显示舰娘名字；否则显示当前ID
             bool randomMode = globalConfig.randomVoices;
             string suffix = randomMode ? "（随机模式）" : "";
-            
+
             if (voiceFolderConfig != null && !string.IsNullOrEmpty(voiceFolderConfig.name))
             {
                 notifyIcon.Text = $"PoiTime! (当前语音包：{voiceFolderConfig.name}{suffix})";
@@ -416,7 +458,7 @@ namespace ReportTimePlayer
         {
             var ids = new List<string>();
             string voicesRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "voices");
-    
+
             if (Directory.Exists(voicesRoot))
             {
                 foreach (var dir in Directory.GetDirectories(voicesRoot))
@@ -466,7 +508,7 @@ namespace ReportTimePlayer
             string shipName = voiceFolderConfig?.name ?? currentId;
             string modeInfo = globalConfig.randomVoices
                 ? "（随机模式）" : "";
-            MessageBox.Show($"成功加载{shipName}语音包{modeInfo}", "PoiTime!"); 
+            MessageBox.Show($"成功加载{shipName}语音包{modeInfo}", "PoiTime!");
             notifyIcon.ShowBalloonTip(2000, "重载配置", $"成功加载{shipName}语音包", ToolTipIcon.Info);
         }
 
@@ -487,28 +529,25 @@ namespace ReportTimePlayer
 
         internal void OpenSettings()
         {
-            using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncementWithLine, StopPreview, h => voiceFolderConfig?.voices?.FirstOrDefault(a => a.hour == h)?.text))
+            if (settingsForm != null) { settingsForm.Activate(); return; }
+            using (var form = new AnnouncementSettingsForm(globalConfig, PreviewAnnouncementWithLine, StopPreview,
+                h => voiceFolderConfig?.voices?.FirstOrDefault(v => v.hour == h)?.text,
+                h => voiceFolderConfig?.voices?.FirstOrDefault(v => v.hour == h)?.japaneseText, this))
             {
-                if (form.ShowDialog() != DialogResult.OK) return;
-                globalConfig = form.Draft;
-                if (globalConfig.audioOutput == "Browser") { audio?.Dispose(); audio = null; }
-                try
-                {
-                    File.WriteAllText(configPath, JsonSerializer.Serialize(globalConfig, new JsonSerializerOptions { WriteIndented = true }));
-                    if (form.EditedLines.Count > 0 && voiceFolderConfig?.voices != null)
-                    {
-                        foreach (var edit in form.EditedLines)
-                        {
-                            var voice = voiceFolderConfig.voices.FirstOrDefault(a => a.hour == edit.Key);
-                            if (voice != null) voice.text = edit.Value;
-                        }
-                        File.WriteAllText(Path.Combine(voiceFolder, "config.json"), JsonSerializer.Serialize(voiceFolderConfig, new JsonSerializerOptions { WriteIndented = true }));
+                settingsForm = form;
+                try {
+                    if (form.ShowDialog() != DialogResult.OK) return;
+                    foreach (var packId in form.EditedPackIds) {
+                        var pack = ReadVoicePack(packId);
+                        foreach (var edit in form.LinesForPack(packId, false)) { var voice = pack.voices?.FirstOrDefault(v => v.hour == edit.Key); if (voice != null) voice.text = edit.Value; }
+                        foreach (var edit in form.LinesForPack(packId, true)) { var voice = pack.voices?.FirstOrDefault(v => v.hour == edit.Key); if (voice != null) voice.japaneseText = edit.Value; }
+                        File.WriteAllText(Path.Combine(VoicePackPath(packId), "config.json"), JsonSerializer.Serialize(pack, new JsonSerializerOptions { WriteIndented = true }));
                     }
-                }
-                catch (Exception ex)
-                {
-                    notifyIcon.ShowBalloonTip(3000, "保存失败", ex.Message, ToolTipIcon.Error);
-                }
+                    File.WriteAllText(configPath, JsonSerializer.Serialize(form.Draft, new JsonSerializerOptions { WriteIndented = true }));
+                    StopPreview(); LoadGlobalConfig();
+                    if (globalConfig.audioOutput == "Browser") { audio?.Dispose(); audio = null; }
+                } catch (Exception ex) { MessageBox.Show(form, "保存失败：" + ex.Message, "PoiTime 设置"); }
+                finally { settingsForm = null; }
             }
         }
 
@@ -563,7 +602,7 @@ namespace ReportTimePlayer
         public Dictionary<string, string> GetAvailableVoicePacks()
         {
             var packs = new Dictionary<string, string>();
-            string voicesRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "voices");
+            string voicesRoot = settingsVoicesRoot;
 
             if (!Directory.Exists(voicesRoot)) return packs;
 
@@ -598,7 +637,7 @@ namespace ReportTimePlayer
             try
             {
                 bool isRandomMode = newId == "RANDOM";
-                
+
                 if (isRandomMode)
                 {
                     var availableIds = GetAvailableVoicePackIds();
@@ -606,7 +645,7 @@ namespace ReportTimePlayer
                 }
 
                 await CheckAndDownloadVoicePackage(newId);
-                
+
                 globalConfig.id = isRandomMode ? "" : newId;
                 globalConfig.randomVoices = isRandomMode;
                 string json = JsonSerializer.Serialize(globalConfig);
@@ -668,7 +707,7 @@ namespace ReportTimePlayer
         /// <param name="announcement">报时语音配置项</param>
         private void PlayVoiceAnnouncement(VoiceAnnouncement announcement)
         {
-            PlayAnnouncement(announcement.fileName, announcement.text,
+            PlayAnnouncement(announcement.fileName, VoiceAnnouncement.FormatText(announcement.text, announcement.japaneseText, globalConfig.dialogueLanguage),
                 $"{announcement.hour:D2}:{announcement.minute:D2}");
         }
 
@@ -678,7 +717,7 @@ namespace ReportTimePlayer
         /// <param name="fileName">特殊语音文件名</param>
         private void PlaySpecialVoiceAnnouncement(string fileName)
         {
-            PlayAnnouncement(fileName, voiceFolderConfig?.special?.text, "特别报时");
+            PlayAnnouncement(fileName, VoiceAnnouncement.FormatText(voiceFolderConfig?.special?.text, voiceFolderConfig?.special?.japaneseText, globalConfig.dialogueLanguage), "特别报时");
         }
 
         private void StopPreview()
@@ -693,15 +732,19 @@ namespace ReportTimePlayer
 
         private void PreviewAnnouncementWithLine(int hour, Config settings, string line)
         {
-            var announcement = voiceFolderConfig?.voices?.FirstOrDefault(a => a.hour == hour);
-            if (announcement == null)
-            {
-                MessageBox.Show("当前语音包没有此时刻的语音，请先下载或选择语音包。", "试听报时");
-                return;
-            }
-            StopPreview();
-            PlayAnnouncement(announcement.fileName, line ?? announcement.text,
-                $"{announcement.hour:D2}:{announcement.minute:D2}", settings, true);
+            string previousId = currentId, previousFolder = voiceFolder;
+            var previousPack = voiceFolderConfig;
+            try {
+                if (!string.IsNullOrWhiteSpace(settings.id) && settings.id != currentId) {
+                    currentId = settings.id; voiceFolder = VoicePackPath(currentId); voiceFolderConfig = ReadVoicePack(currentId);
+                }
+                var announcement = voiceFolderConfig?.voices?.FirstOrDefault(v => v.hour == hour);
+                if (announcement == null) { MessageBox.Show("当前语音包没有此时刻的语音。", "试听报时"); return; }
+                StopPreview();
+                PlayAnnouncement(announcement.fileName, line ?? VoiceAnnouncement.FormatText(announcement.text, announcement.japaneseText, settings.dialogueLanguage),
+                    $"{announcement.hour:D2}:{announcement.minute:D2}", settings, true);
+            } catch (Exception ex) { MessageBox.Show("预览失败：" + ex.Message, "PoiTime"); }
+            finally { currentId = previousId; voiceFolder = previousFolder; voiceFolderConfig = previousPack; }
         }
 
         private void PlayAnnouncement(string fileName, string line, string fallbackLine, Config settings = null, bool preview = false)
@@ -903,15 +946,15 @@ namespace ReportTimePlayer
         private ListView listView;
         private string selectedId;
         private Button btnDownload;
-    
+
         public string SelectedId => selectedId;
-    
+
         public VoicePackSelector(Dictionary<string, string> voicePacks, ReportTimeContext context)
         {
             _context = context;
             InitializeComponents(voicePacks);
         }
-    
+
         private void InitializeComponents(Dictionary<string, string> voicePacks)
         {
             // 初始化控件
@@ -919,7 +962,7 @@ namespace ReportTimePlayer
             this.Size = new Size(400, 340);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Font = new Font("微软雅黑", 10);
-    
+
             // 列表视图
             listView = new ListView
             {
@@ -932,7 +975,7 @@ namespace ReportTimePlayer
             listView.Columns.Add("ID", 100);
             listView.Columns.Add("语音包名称", 260);
             listView.MouseDoubleClick += ListView_MouseDoubleClick;
-    
+
             // 填充数据
             foreach (var pack in voicePacks)
             {
@@ -940,7 +983,7 @@ namespace ReportTimePlayer
                 item.SubItems.Add(pack.Value);
                 listView.Items.Add(item);
             }
-    
+
             // 随机模式复选框初始化
             chkRandomMode = new CheckBox
             {
@@ -948,7 +991,7 @@ namespace ReportTimePlayer
                 AutoSize = true,
                 Location = new Point(20, 270)
             };
-    
+
             // 下载按钮初始化
             btnDownload = new Button
             {
@@ -958,38 +1001,38 @@ namespace ReportTimePlayer
                 Font = new Font("微软雅黑", 9)
             };
             btnDownload.Click += BtnDownload_Click;
-    
+
             // 添加控件到窗体
             this.Controls.Add(listView);
             this.Controls.Add(chkRandomMode);
             this.Controls.Add(btnDownload);
         }
-    
+
         private void ListView_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             if (listView.SelectedItems.Count > 0)
             {
                 selectedId = listView.SelectedItems[0].Text;
-                
+
                 // 正确设置随机模式标识
                 if (chkRandomMode.Checked)
                 {
                     selectedId = "RANDOM";
                 }
-                
+
                 this.DialogResult = DialogResult.OK;
                 this.Close();
             }
         }
-    
+
         private void BtnDownload_Click(object sender, EventArgs e)
         {
             string newId = Interaction.InputBox("请输入语音包ID：", "下载新语音包", "144");
             if (string.IsNullOrWhiteSpace(newId)) return;
-    
+
             string shipName = Interaction.InputBox("请输入语音包名称：", "语音包名称", "未知语音包");
             if (string.IsNullOrWhiteSpace(shipName)) return;
-    
+
             var downloadForm = new DownloadProgressForm(_context, newId, shipName);
             if (downloadForm.ShowDialog() == DialogResult.OK)
             {

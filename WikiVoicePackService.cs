@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -49,15 +49,19 @@ namespace ReportTimePlayer
 
                     string source = parsed.GetProperty("wikitext").GetProperty("*").GetString();
                     var lines = ParseHourlyLines(source);
+                    var japaneseLines = ParseHourlyLines(source, "日文台词");
                     var result = new WikiEnrichmentResult();
                     foreach (var voice in config.voices ?? Enumerable.Empty<VoiceAnnouncement>())
                     {
                         string key = Path.GetFileNameWithoutExtension(voice.fileName ?? "");
+                        bool updated = false;
+                        if (string.IsNullOrWhiteSpace(voice.japaneseText) && japaneseLines.TryGetValue(key, out string japanese)) { voice.japaneseText = japanese; updated = true; }
                         if (string.IsNullOrWhiteSpace(voice.text) && lines.TryGetValue(key, out string text))
                         {
                             voice.text = text;
-                            result.TextCount++;
+                            updated = true;
                         }
+                        if (updated) result.TextCount++;
                     }
 
                     string portraitName = string.IsNullOrWhiteSpace(config.portrait)
@@ -95,7 +99,7 @@ namespace ReportTimePlayer
             }
         }
 
-        public static Dictionary<string, string> ParseHourlyLines(string source)
+        public static Dictionary<string, string> ParseHourlyLines(string source, string languageField = null)
         {
             var lines = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Match match in Regex.Matches(source ?? "",
@@ -104,8 +108,8 @@ namespace ReportTimePlayer
                 string body = match.Groups["body"].Value;
                 string file = Field(body, "档名");
                 if (!Regex.IsMatch(file, @"^\d+[a-z]?-\d{4}$", RegexOptions.IgnoreCase)) continue;
-                string text = Field(body, "中文译文");
-                if (string.IsNullOrWhiteSpace(text)) text = Field(body, "日文台词");
+                string text = Field(body, languageField ?? "中文译文");
+                if (languageField == null && string.IsNullOrWhiteSpace(text)) text = Field(body, "日文台词");
                 text = CleanWikiText(text);
                 if (!string.IsNullOrWhiteSpace(text)) lines[file] = text;
             }

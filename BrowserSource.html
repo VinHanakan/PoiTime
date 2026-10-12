@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title>PoiTime OBS 立绘与台词</title>
 <style>
 html,body{margin:0;background:transparent;overflow:hidden}
-#stage{position:fixed;inset:0;display:flex;pointer-events:none;padding:16px;box-sizing:border-box;justify-content:flex-end;align-items:flex-end}
-#announcement{display:none;width:360px;height:250px;object-fit:contain;max-width:100%;max-height:100%}
+#stage{display:inline-block;pointer-events:none;vertical-align:top}
+#announcement{display:none;width:auto;height:auto;vertical-align:top;object-fit:contain;max-width:100%;max-height:100%}
 </style></head><body><div id="stage"><img id="announcement" alt="报时立绘与台词"></div>
 <script>
 'use strict';
@@ -30,8 +30,6 @@ async function play(event){
     }else{playing.delete(item);}
     if(stopped || (event.preview && ticket!==generation))return;
     if(visual && visualTicket===visualGeneration){
-      const positions={TopLeft:['flex-start','flex-start'],TopRight:['flex-end','flex-start'],Center:['center','center'],BottomLeft:['flex-start','flex-end'],BottomRight:['flex-end','flex-end']};
-      const position=positions[event.position] || positions.BottomRight;stage.style.justifyContent=position[0];stage.style.alignItems=position[1];
       announcement.src=visual.src;announcement.style.display='block';
       visualTimer=setTimeout(()=>{if(visualTicket===visualGeneration)hideVisual();},Math.max(3000,Math.min(60000,event.durationMs || 3000)));
     }

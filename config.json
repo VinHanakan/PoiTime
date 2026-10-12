@@ -21,5 +21,11 @@
   "textColor": "#FFFFFF",
   "textOutline": true,
   "textOutlineColor": "#000000",
-  "textOutlineWidth": 2
+  "textOutlineWidth": 2,
+  "dialogueLanguage": "Chinese",
+  "regionWidth": 360,
+  "regionHeight": 0,
+  "regionScale": 100,
+  "positionOffsetX": 0,
+  "positionOffsetY": 0
 }

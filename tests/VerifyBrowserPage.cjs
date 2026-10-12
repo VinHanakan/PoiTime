@@ -1,4 +1,4 @@
-const fs = require('node:fs');
+﻿const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -22,7 +22,8 @@ async function play(event) { context.testEvent = event; await vm.runInContext('p
 (async () => {
   await play({ visualUrl: 'image/first', url: 'audio/first', preview: true, volume: .34, position: 'TopLeft', durationMs: 5500 });
   assert.equal(audioPlays, 1); assert.equal(elements.announcement.style.display, 'block');
-  assert.equal(elements.stage.style.justifyContent, 'flex-start'); assert.equal(elements.stage.style.alignItems, 'flex-start');
+  assert.equal(elements.stage.style.justifyContent, undefined); assert.equal(elements.stage.style.alignItems, undefined);
+  assert(!html.includes('position:fixed')); assert(!html.includes('padding:16px'));
   assert.equal([...timers.values()][0].ms, 5500);
   vm.runInContext('stopPreview()', context);
   assert.equal(elements.announcement.style.display, 'none'); assert.equal(audioStops, 1);
